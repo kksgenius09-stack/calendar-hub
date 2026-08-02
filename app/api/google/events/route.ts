@@ -10,7 +10,12 @@ type GoogleEvent = {
 
 export async function GET(request: NextRequest) {
   const sealed = request.cookies.get(googleCookie.name)?.value;
-  if (!sealed) return NextResponse.json({ connected: false, events: [] });
+  const configured = Boolean(
+    process.env.GOOGLE_CLIENT_ID &&
+    process.env.GOOGLE_CLIENT_SECRET &&
+    process.env.GOOGLE_TOKEN_SECRET,
+  );
+  if (!sealed) return NextResponse.json({ connected: false, configured, events: [] });
 
   try {
     const tokens = await openTokens(sealed);
@@ -53,6 +58,7 @@ export async function GET(request: NextRequest) {
     const calendar = await calendarResponse.json() as { items?: GoogleEvent[] };
     const response = NextResponse.json({
       connected: true,
+      configured: true,
       events: (calendar.items ?? []).map((event) => ({
         id: event.id,
         title: event.summary || "제목 없는 일정",

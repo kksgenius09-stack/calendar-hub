@@ -44,13 +44,15 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
   const [googleEvents, setGoogleEvents] = useState<EventItem[]>([]);
 
   useEffect(() => {
     fetch("/api/google/events")
       .then((response) => response.json())
-      .then((data: { connected?: boolean; events?: Array<{ id: string; title: string; start?: string; allDay?: boolean }> }) => {
+      .then((data: { connected?: boolean; configured?: boolean; events?: Array<{ id: string; title: string; start?: string; allDay?: boolean }> }) => {
         setGoogleConnected(Boolean(data.connected));
+        setGoogleReady(Boolean(data.configured));
         const liveEvents = (data.events ?? []).flatMap((event) => {
           if (!event.start) return [];
           const start = new Date(event.start);
@@ -66,6 +68,12 @@ export default function Home() {
         setGoogleEvents(liveEvents);
       })
       .catch(() => setGoogleConnected(false));
+
+    const googleResult = new URLSearchParams(window.location.search).get("google");
+    if (googleResult === "setup-required") setNotice("Google 연동 설정이 아직 완료되지 않았어요. OAuth 인증정보를 연결해야 합니다.");
+    if (googleResult === "failed") setNotice("Google 연결에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    if (googleResult === "connected") setNotice("Google 캘린더가 연결됐어요.");
+    if (googleResult) window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
   const filteredEvents = useMemo(
@@ -130,13 +138,21 @@ export default function Home() {
                 />
                 <span className={`checkmark ${source}`}>✓</span>
                 <span>{sourceLabel[source]}</span>
-                <em>{source === "icloud" ? "개인" : source === "google" ? (googleConnected ? "연결됨" : "미연결") : "업무"}</em>
+                <em>{source === "icloud" ? "개인" : source === "google" ? (googleConnected ? "연결됨" : googleReady ? "미연결" : "설정 필요") : "업무"}</em>
               </label>
             ))}
             {googleConnected ? (
               <form action="/api/google/disconnect" method="post"><button className="connect-calendar" type="submit">Google 연결 해제</button></form>
             ) : (
-              <a className="connect-calendar" href="/api/google/connect">+ &nbsp;Google 캘린더 연결</a>
+              <a
+                className="connect-calendar"
+                href={googleReady ? "/api/google/connect" : "#"}
+                onClick={(event) => {
+                  if (googleReady) return;
+                  event.preventDefault();
+                  setNotice("Google OAuth 인증정보가 아직 설정되지 않았어요. 인증정보를 추가한 후 연결할 수 있어요.");
+                }}
+              >+ &nbsp;Google 캘린더 연결</a>
             )}
           </section>
 
