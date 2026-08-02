@@ -58,7 +58,7 @@ button { color: inherit; }
 .calendar-row input:not(:checked) + .checkmark { background: #fff !important; border: 1px solid #cfd3d9; color: transparent; }
 .checkmark.icloud { background: #5b53e9; }.checkmark.google { background: #e7a938; }.checkmark.daou { background: #2a9b7f; }
 .calendar-row em { font-style: normal; font-size: 9px; color: #9da3ab; margin-left: auto; }
-.connect-calendar { border: 0; background: transparent; color: var(--accent); font-size: 11px; padding: 10px 5px; cursor: pointer; }
+.connect-calendar { display: inline-block; border: 0; background: transparent; color: var(--accent); font-size: 11px; padding: 10px 5px; cursor: pointer; text-decoration: none; }
 .sync-card { margin-top: auto; border: 1px solid var(--line); border-radius: 10px; padding: 11px; display: flex; align-items: center; gap: 9px; }
 .sync-icon { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-size: 14px; }
 .sync-card div { display: flex; flex-direction: column; gap: 2px; font-size: 10px; }.sync-card small { color: #979da6; font-size: 8px; }

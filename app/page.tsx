@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Source = "icloud" | "google" | "daou";
 type EventItem = {
+  id?: string;
   day: number;
   title: string;
   time: string;
@@ -42,10 +43,34 @@ export default function Home() {
   const [quickInput, setQuickInput] = useState("");
   const [notice, setNotice] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleEvents, setGoogleEvents] = useState<EventItem[]>([]);
+
+  useEffect(() => {
+    fetch("/api/google/events")
+      .then((response) => response.json())
+      .then((data: { connected?: boolean; events?: Array<{ id: string; title: string; start?: string; allDay?: boolean }> }) => {
+        setGoogleConnected(Boolean(data.connected));
+        const liveEvents = (data.events ?? []).flatMap((event) => {
+          if (!event.start) return [];
+          const start = new Date(event.start);
+          if (Number.isNaN(start.getTime()) || start.getFullYear() !== 2026 || start.getMonth() !== 7) return [];
+          return [{
+            id: event.id,
+            day: start.getDate(),
+            title: event.title,
+            time: event.allDay ? "종일" : start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
+            source: "google" as const,
+          }];
+        });
+        setGoogleEvents(liveEvents);
+      })
+      .catch(() => setGoogleConnected(false));
+  }, []);
 
   const filteredEvents = useMemo(
-    () => events.filter((event) => visible[event.source]),
-    [visible],
+    () => [...events.filter((event) => event.source !== "google"), ...(googleConnected ? googleEvents : events.filter((event) => event.source === "google"))].filter((event) => visible[event.source]),
+    [visible, googleConnected, googleEvents],
   );
 
   const submitQuick = () => {
@@ -105,10 +130,14 @@ export default function Home() {
                 />
                 <span className={`checkmark ${source}`}>✓</span>
                 <span>{sourceLabel[source]}</span>
-                <em>{source === "icloud" ? "개인" : source === "google" ? "공유" : "업무"}</em>
+                <em>{source === "icloud" ? "개인" : source === "google" ? (googleConnected ? "연결됨" : "미연결") : "업무"}</em>
               </label>
             ))}
-            <button className="connect-calendar">+ &nbsp;캘린더 연결</button>
+            {googleConnected ? (
+              <form action="/api/google/disconnect" method="post"><button className="connect-calendar" type="submit">Google 연결 해제</button></form>
+            ) : (
+              <a className="connect-calendar" href="/api/google/connect">+ &nbsp;Google 캘린더 연결</a>
+            )}
           </section>
 
           <div className="sync-card">
