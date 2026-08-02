@@ -51,10 +51,11 @@ export function googleConfig(origin: string) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) throw new Error("Google OAuth is not configured");
+  const publicOrigin = (process.env.PUBLIC_APP_URL || origin).replace(/\/$/, "");
   return {
     clientId,
     clientSecret,
-    redirectUri: `${origin}/api/google/callback`,
+    redirectUri: `${publicOrigin}/api/google/callback`,
   };
 }
 
