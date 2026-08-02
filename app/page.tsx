@@ -27,7 +27,7 @@ const events: EventItem[] = [
 const sourceLabel: Record<Source, string> = {
   icloud: "iCloud",
   google: "Google",
-  daou: "다우오피스",
+  daou: "회사 일정",
 };
 
 const days = ["일", "월", "화", "수", "목", "금", "토"];
