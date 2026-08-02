@@ -8,6 +8,14 @@ type GoogleEvent = {
   end?: { date?: string; dateTime?: string };
 };
 
+type GoogleCalendar = {
+  id: string;
+  summary?: string;
+  primary?: boolean;
+  selected?: boolean;
+  backgroundColor?: string;
+};
+
 export async function GET(request: NextRequest) {
   const sealed = request.cookies.get(googleCookie.name)?.value;
   const configured = Boolean(
@@ -50,22 +58,43 @@ export async function GET(request: NextRequest) {
       orderBy: "startTime",
       maxResults: "250",
     });
-    const calendarResponse = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
-      { headers: { authorization: `Bearer ${tokens.access_token}` } },
+    const authorization = { authorization: `Bearer ${tokens.access_token}` };
+    const listResponse = await fetch(
+      "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250",
+      { headers: authorization },
     );
-    if (!calendarResponse.ok) throw new Error("Calendar request failed");
-    const calendar = await calendarResponse.json() as { items?: GoogleEvent[] };
-    const response = NextResponse.json({
-      connected: true,
-      configured: true,
-      events: (calendar.items ?? []).map((event) => ({
-        id: event.id,
+    if (!listResponse.ok) throw new Error("Calendar list request failed");
+    const list = await listResponse.json() as { items?: GoogleCalendar[] };
+    const calendars = list.items ?? [];
+    const eventGroups = await Promise.all(calendars.map(async (calendar) => {
+      const calendarResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`,
+        { headers: authorization },
+      );
+      if (!calendarResponse.ok) return [];
+      const data = await calendarResponse.json() as { items?: GoogleEvent[] };
+      return (data.items ?? []).map((event) => ({
+        id: `${calendar.id}:${event.id}`,
+        calendarId: calendar.id,
+        calendarName: calendar.summary || "Google 캘린더",
+        calendarColor: calendar.backgroundColor || "#e7a938",
         title: event.summary || "제목 없는 일정",
         start: event.start?.dateTime || event.start?.date,
         end: event.end?.dateTime || event.end?.date,
         allDay: Boolean(event.start?.date),
+      }));
+    }));
+    const response = NextResponse.json({
+      connected: true,
+      configured: true,
+      calendars: calendars.map((calendar) => ({
+        id: calendar.id,
+        name: calendar.summary || "Google 캘린더",
+        color: calendar.backgroundColor || "#e7a938",
+        primary: Boolean(calendar.primary),
+        selected: calendar.selected !== false,
       })),
+      events: eventGroups.flat(),
     });
     if (refreshed) response.cookies.set(googleCookie.name, await sealTokens(tokens), googleCookie.options);
     return response;

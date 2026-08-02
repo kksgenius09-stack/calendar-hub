@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 type Source = "icloud" | "google" | "daou";
 type EventItem = {
@@ -9,7 +9,17 @@ type EventItem = {
   title: string;
   time: string;
   source: Source;
+  calendarId?: string;
+  color?: string;
   span?: number;
+};
+
+type GoogleCalendarItem = {
+  id: string;
+  name: string;
+  color: string;
+  primary: boolean;
+  selected: boolean;
 };
 
 const events: EventItem[] = [
@@ -46,13 +56,23 @@ export default function Home() {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
   const [googleEvents, setGoogleEvents] = useState<EventItem[]>([]);
+  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarItem[]>([]);
+  const [visibleGoogleCalendars, setVisibleGoogleCalendars] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/google/events")
       .then((response) => response.json())
-      .then((data: { connected?: boolean; configured?: boolean; events?: Array<{ id: string; title: string; start?: string; allDay?: boolean }> }) => {
+      .then((data: { connected?: boolean; configured?: boolean; calendars?: GoogleCalendarItem[]; events?: Array<{ id: string; calendarId: string; calendarColor?: string; title: string; start?: string; allDay?: boolean }> }) => {
         setGoogleConnected(Boolean(data.connected));
         setGoogleReady(Boolean(data.configured));
+        const calendars = data.calendars ?? [];
+        setGoogleCalendars(calendars);
+        let saved: Record<string, boolean> = {};
+        try { saved = JSON.parse(localStorage.getItem("oncal-google-calendars") || "{}"); } catch { saved = {}; }
+        setVisibleGoogleCalendars(Object.fromEntries(calendars.map((calendar) => [
+          calendar.id,
+          saved[calendar.id] ?? calendar.selected,
+        ])));
         const liveEvents = (data.events ?? []).flatMap((event) => {
           if (!event.start) return [];
           const start = new Date(event.start);
@@ -63,6 +83,8 @@ export default function Home() {
             title: event.title,
             time: event.allDay ? "종일" : start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
             source: "google" as const,
+            calendarId: event.calendarId,
+            color: event.calendarColor,
           }];
         });
         setGoogleEvents(liveEvents);
@@ -77,9 +99,17 @@ export default function Home() {
   }, []);
 
   const filteredEvents = useMemo(
-    () => [...events.filter((event) => event.source !== "google"), ...(googleConnected ? googleEvents : events.filter((event) => event.source === "google"))].filter((event) => visible[event.source]),
-    [visible, googleConnected, googleEvents],
+    () => [...events.filter((event) => event.source !== "google"), ...(googleConnected ? googleEvents : events.filter((event) => event.source === "google"))]
+      .filter((event) => visible[event.source])
+      .filter((event) => event.source !== "google" || !googleConnected || !event.calendarId || visibleGoogleCalendars[event.calendarId]),
+    [visible, visibleGoogleCalendars, googleConnected, googleEvents],
   );
+
+  const toggleGoogleCalendar = (calendarId: string) => {
+    const next = { ...visibleGoogleCalendars, [calendarId]: !visibleGoogleCalendars[calendarId] };
+    setVisibleGoogleCalendars(next);
+    localStorage.setItem("oncal-google-calendars", JSON.stringify(next));
+  };
 
   const submitQuick = () => {
     if (!quickInput.trim()) return;
@@ -130,16 +160,34 @@ export default function Home() {
           <section className="calendar-list">
             <div className="section-heading"><b>내 캘린더</b><button>···</button></div>
             {(["icloud", "google", "daou"] as Source[]).map((source) => (
-              <label className="calendar-row" key={source}>
-                <input
-                  type="checkbox"
-                  checked={visible[source]}
-                  onChange={() => setVisible({ ...visible, [source]: !visible[source] })}
-                />
-                <span className={`checkmark ${source}`}>✓</span>
-                <span>{sourceLabel[source]}</span>
-                <em>{source === "icloud" ? "개인" : source === "google" ? (googleConnected ? "연결됨" : googleReady ? "미연결" : "설정 필요") : "업무"}</em>
-              </label>
+              <Fragment key={source}>
+                <label className="calendar-row">
+                  <input
+                    type="checkbox"
+                    checked={visible[source]}
+                    onChange={() => setVisible({ ...visible, [source]: !visible[source] })}
+                  />
+                  <span className={`checkmark ${source}`}>✓</span>
+                  <span>{sourceLabel[source]}</span>
+                  <em>{source === "icloud" ? "개인" : source === "google" ? (googleConnected ? "연결됨" : googleReady ? "미연결" : "설정 필요") : "업무"}</em>
+                </label>
+                {source === "google" && googleConnected && visible.google && (
+                  <div className="google-calendar-children" aria-label="연결된 Google 캘린더">
+                    {googleCalendars.map((calendar) => (
+                      <label className="calendar-row calendar-child" key={calendar.id}>
+                        <input
+                          type="checkbox"
+                          checked={visibleGoogleCalendars[calendar.id] ?? true}
+                          onChange={() => toggleGoogleCalendar(calendar.id)}
+                        />
+                        <span className="checkmark google-child" style={{ backgroundColor: calendar.color }}>✓</span>
+                        <span className="calendar-child-name">{calendar.name}</span>
+                        {calendar.primary && <em>기본</em>}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </Fragment>
             ))}
             {googleConnected ? (
               <form action="/api/google/disconnect" method="post"><button className="connect-calendar" type="submit">Google 연결 해제</button></form>
@@ -204,7 +252,12 @@ function DayCell({ day, events, muted, today }: { day: number; events: EventItem
       <span className="day-number">{day}</span>
       <div className="events">
         {events.map((event) => (
-          <button className={`event ${event.source}`} key={`${event.title}-${event.time}`} title={`${sourceLabel[event.source]} · ${event.title}`}>
+          <button
+            className={`event ${event.source}`}
+            key={event.id || `${event.title}-${event.time}`}
+            title={`${sourceLabel[event.source]} · ${event.title}`}
+            style={event.source === "google" && event.color ? { borderLeftColor: event.color, backgroundColor: `${event.color}20` } : undefined}
+          >
             <span>{event.time}</span>{event.title}
           </button>
         ))}
