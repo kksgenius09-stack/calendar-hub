@@ -38,7 +38,8 @@ export async function openCompanyCredentials(value: string): Promise<CompanyCalD
 }
 
 export function validateCalDavServer(value: string) {
-  const url = new URL(value);
+  const normalized = /^https?:\/\//i.test(value.trim()) ? value.trim() : `https://${value.trim()}`;
+  const url = new URL(normalized);
   if (url.protocol !== "https:") throw new Error("HTTPS 주소만 사용할 수 있습니다.");
   const host = url.hostname.toLowerCase();
   if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".local")) throw new Error("외부에서 접속 가능한 서버 주소가 필요합니다.");
@@ -50,10 +51,10 @@ export function validateCalDavServer(value: string) {
 
 export async function discoverCompanyCalendars(credentials: CompanyCalDavCredentials) {
   const server = new URL(credentials.serverUrl);
-  const candidates = [
-    new URL("/.well-known/caldav", server.origin).toString(),
-    credentials.serverUrl,
-  ];
+  const directFirst = server.pathname !== "/";
+  const candidates = directFirst
+    ? [credentials.serverUrl, new URL("/.well-known/caldav", server.origin).toString()]
+    : [new URL("/.well-known/caldav", server.origin).toString(), credentials.serverUrl];
   let lastError: unknown;
   for (const candidate of [...new Set(candidates)]) {
     try {
