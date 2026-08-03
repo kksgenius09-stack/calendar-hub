@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { companyCalDavCookie, openCompanyCredentials } from "@/app/lib/company-caldav";
-import { discoverICloudCalendars, fetchICloudEvents } from "@/app/lib/icloud-caldav";
+import { companyCalDavCookie, discoverCompanyCalendars, openCompanyCredentials } from "@/app/lib/company-caldav";
+import { fetchICloudEvents } from "@/app/lib/icloud-caldav";
 
 export async function GET(request: NextRequest) {
   const sealed = request.cookies.get(companyCalDavCookie.name)?.value;
   if (!sealed) return NextResponse.json({ connected: false, calendars: [], events: [] });
   try {
     const credentials = await openCompanyCredentials(sealed);
-    const calendars = await discoverICloudCalendars(credentials, credentials.serverUrl);
+    const calendars = await discoverCompanyCalendars(credentials);
     const now = new Date();
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
     const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1));

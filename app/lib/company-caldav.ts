@@ -1,3 +1,5 @@
+import { discoverICloudCalendars } from "@/app/lib/icloud-caldav";
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -44,6 +46,24 @@ export function validateCalDavServer(value: string) {
   url.username = "";
   url.password = "";
   return url.toString();
+}
+
+export async function discoverCompanyCalendars(credentials: CompanyCalDavCredentials) {
+  const server = new URL(credentials.serverUrl);
+  const candidates = [
+    new URL("/.well-known/caldav", server.origin).toString(),
+    credentials.serverUrl,
+  ];
+  let lastError: unknown;
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      const calendars = await discoverICloudCalendars(credentials, candidate);
+      if (calendars.length) return calendars;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("CalDAV calendar discovery failed");
 }
 
 export const companyCalDavCookie = {
