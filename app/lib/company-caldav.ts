@@ -18,7 +18,7 @@ function base64ToBytes(value: string) {
 }
 
 async function encryptionKey() {
-  const secret = process.env.CALDAV_CREDENTIAL_SECRET;
+  const secret = process.env.CALENDAR_CREDENTIAL_SECRET;
   if (!secret) throw new Error("CalDAV encryption is not configured");
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -71,8 +71,3 @@ export async function discoverCompanyCalendars(credentials: CompanyCalDavCredent
   if (errorCodes.includes("CALDAV_HTTP_403")) throw new Error("CALDAV_HTTP_403");
   throw lastError instanceof Error ? lastError : new Error("CalDAV calendar discovery failed");
 }
-
-export const companyCalDavCookie = {
-  name: "oncal_company_caldav",
-  options: { httpOnly: true, secure: true, sameSite: "lax" as const, path: "/", maxAge: 60 * 60 * 24 * 30 },
-};

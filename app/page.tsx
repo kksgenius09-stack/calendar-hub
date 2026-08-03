@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import KoreanLunarCalendar from "korean-lunar-calendar";
+import { getSupabaseBrowserClient } from "@/app/lib/supabase/client";
 
 type Source = "icloud" | "google" | "daou";
 type View = "day" | "week" | "month";
@@ -25,6 +26,9 @@ function rangeFor(cursor: Date, view: View) { if (view === "month") { const firs
 function defaultForm(date: Date, calendarKey = "") : EventForm { return { title: "", date: dateKey(date), startTime: "09:00", endTime: "10:00", allDay: false, recurrence: "", calendarKey }; }
 
 export default function Home() {
+  const [authReady, setAuthReady] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [view, setView] = useState<View>("month");
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -48,6 +52,9 @@ export default function Home() {
   const [calDavModal, setCalDavModal] = useState(false);
   const [calDavForm, setCalDavForm] = useState({ serverUrl: "", email: "", password: "" });
   const [calDavConnecting, setCalDavConnecting] = useState(false);
+  const [iCloudModal, setICloudModal] = useState(false);
+  const [iCloudForm, setICloudForm] = useState({ email: "", password: "" });
+  const [iCloudConnecting, setICloudConnecting] = useState(false);
   const visibleRange = useMemo(() => rangeFor(cursor, view), [cursor, view]);
 
   const loadEvents = useCallback(async () => {
@@ -63,10 +70,11 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleRange.start.getTime(), visibleRange.end.getTime()]);
 
+  useEffect(() => { const supabase = getSupabaseBrowserClient(); supabase.auth.getUser().then(({ data }) => { setUserEmail(data.user?.email || null); setAuthReady(true); }); const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { setUserEmail(session?.user.email || null); setAuthReady(true); }); return () => listener.subscription.unsubscribe(); }, []);
   useEffect(() => { setShowLunar(localStorage.getItem("oncal-show-lunar") === "true"); setAutoSyncMinutes(Number(localStorage.getItem("oncal-auto-sync") || "1")); setDefaultCalendarKey(localStorage.getItem("oncal-default-calendar") || ""); const params = new URLSearchParams(location.search); const result = params.get("google") || params.get("icloud") || params.get("caldav"); if (result === "connected") setNotice("캘린더가 연결됐어요."); if (result === "failed") setNotice("연결에 실패했어요. 로그인 정보를 확인해 주세요."); if (result === "setup-required") setNotice("연동 설정이 아직 완료되지 않았어요."); if (result) history.replaceState({}, "", location.pathname); }, []);
-  useEffect(() => { loadEvents(); }, [loadEvents]);
-  useEffect(() => { if (!autoSyncMinutes) return; const timer = window.setInterval(loadEvents, autoSyncMinutes * 60_000); return () => window.clearInterval(timer); }, [autoSyncMinutes, loadEvents]);
-  useEffect(() => { const closeOnEscape = (event: KeyboardEvent) => { if (event.key !== "Escape") return; if (editorOpen && !saving) setEditorOpen(false); else if (calDavModal && !calDavConnecting) setCalDavModal(false); else if (settingsOpen) setSettingsOpen(false); }; window.addEventListener("keydown", closeOnEscape); return () => window.removeEventListener("keydown", closeOnEscape); }, [editorOpen, saving, calDavModal, calDavConnecting, settingsOpen]);
+  useEffect(() => { if (userEmail) loadEvents(); }, [loadEvents, userEmail]);
+  useEffect(() => { if (!autoSyncMinutes || !userEmail) return; const timer = window.setInterval(loadEvents, autoSyncMinutes * 60_000); return () => window.clearInterval(timer); }, [autoSyncMinutes, loadEvents, userEmail]);
+  useEffect(() => { const closeOnEscape = (event: KeyboardEvent) => { if (event.key !== "Escape") return; if (editorOpen && !saving) setEditorOpen(false); else if (iCloudModal && !iCloudConnecting) setICloudModal(false); else if (calDavModal && !calDavConnecting) setCalDavModal(false); else if (settingsOpen) setSettingsOpen(false); else setAccountOpen(false); }; window.addEventListener("keydown", closeOnEscape); return () => window.removeEventListener("keydown", closeOnEscape); }, [editorOpen, saving, iCloudModal, iCloudConnecting, calDavModal, calDavConnecting, settingsOpen]);
 
   const filtered = useMemo(() => events.filter(e => sourceVisible[e.source] && calendarVisible[`${e.source}:${e.calendarId}`] !== false), [events, sourceVisible, calendarVisible]);
   const title = view === "day" ? cursor.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }) : view === "week" ? `${visibleRange.start.getFullYear()}년 ${visibleRange.start.getMonth() + 1}월 ${visibleRange.start.getDate()}일 주` : `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
@@ -87,15 +95,21 @@ export default function Home() {
   const toggleLunar = () => { const next = !showLunar; setShowLunar(next); localStorage.setItem("oncal-show-lunar", String(next)); };
   const changeAutoSync = (minutes: number) => { setAutoSyncMinutes(minutes); localStorage.setItem("oncal-auto-sync", String(minutes)); };
   const changeDefaultCalendar = (key: string) => { setDefaultCalendarKey(key); localStorage.setItem("oncal-default-calendar", key); };
+  const connectICloud = async () => { setICloudConnecting(true); try { const response = await fetch("/api/icloud/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(iCloudForm) }); const data = await response.json(); if (!response.ok || !data.connected) throw new Error(data.error || "연결에 실패했습니다."); setICloudModal(false); setNotice("iCloud 캘린더가 OnCal 계정에 안전하게 저장됐어요."); await loadEvents(); } catch (e) { setNotice(e instanceof Error ? e.message : "연결에 실패했습니다."); } finally { setICloudConnecting(false); } };
   const connectCalDav = async () => { setCalDavConnecting(true); try { const response = await fetch("/api/caldav/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(calDavForm) }); const data = await response.json(); if (!response.ok || !data.connected) throw new Error(data.error || "연결에 실패했습니다."); location.reload(); } catch (e) { setNotice(e instanceof Error ? e.message : "연결에 실패했습니다."); setCalDavConnecting(false); } };
+  const disconnectSource = async (source: Source) => { const path = source === "icloud" ? "/api/icloud/disconnect" : source === "google" ? "/api/google/disconnect" : "/api/caldav/disconnect"; const response = await fetch(path, { method: "POST", redirect: "follow" }); if (response.ok) { setNotice(`${sourceLabel[source]} 연결을 해제했어요.`); await loadEvents(); } else setNotice("연결을 해제하지 못했어요."); };
+  const signOut = async () => { await getSupabaseBrowserClient().auth.signOut(); setEvents([]); setCalendars([]); setConnected({ icloud:false, google:false, daou:false }); setAccountOpen(false); };
   const quickAdd = () => { if (!quickInput.trim()) return; openCreate(cursor, quickInput.trim()); setQuickInput(""); };
+
+  if (!authReady) return <div className="auth-loading"><span className="brand-mark"><i/><i/><i/></span><p>OnCal을 준비하고 있어요…</p></div>;
+  if (!userEmail) return <AuthScreen onSignedIn={email => setUserEmail(email)}/>;
 
   return <main className="app-shell">
     <header className="topbar">
       <button className="mobile-menu" onClick={() => setMobileMenu(!mobileMenu)} aria-label="메뉴 열기"><span/><span/></button>
       <a className="brand" href="#"><span className="brand-mark"><i/><i/><i/></span><span>OnCal</span></a>
       <div className="date-nav"><button onClick={() => step(-1)} aria-label="이전">‹</button><button className="today-button" onClick={() => setCursor(startOfDay(new Date()))}>오늘</button><button onClick={() => step(1)} aria-label="다음">›</button><div className="date-title"><h1>{title}</h1><span>오늘 · {new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"long" })}</span></div></div>
-      <div className="header-actions"><div className="view-switch">{(["day","week","month"] as View[]).map(v => <button key={v} className={view === v ? "active" : ""} onClick={() => setView(v)}>{v === "day" ? "일" : v === "week" ? "주" : "월"}</button>)}</div><button className="avatar">KS</button></div>
+      <div className="header-actions"><div className="view-switch">{(["day","week","month"] as View[]).map(v => <button key={v} className={view === v ? "active" : ""} onClick={() => setView(v)}>{v === "day" ? "일" : v === "week" ? "주" : "월"}</button>)}</div><div className="account-menu"><button className="avatar" onClick={() => setAccountOpen(!accountOpen)}>{userEmail.slice(0,2).toUpperCase()}</button>{accountOpen&&<div className="account-popover"><b>{userEmail}</b><small>캘린더 연결이 모든 기기에 동기화됩니다.</small><button onClick={signOut}>로그아웃</button></div>}</div></div>
     </header>
     <div className="workspace">
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
@@ -103,9 +117,9 @@ export default function Home() {
         <MiniCalendar cursor={cursor} onSelect={d => { setCursor(d); setView("day"); }} />
         <section className="calendar-list"><div className="section-heading"><b>내 캘린더</b><button onClick={() => setSettingsOpen(true)} aria-label="설정 열기">···</button></div>
           {(["icloud","google","daou"] as Source[]).map(source => <Fragment key={source}><label className="calendar-row"><input type="checkbox" checked={sourceVisible[source]} onChange={() => setSourceVisible({ ...sourceVisible, [source]: !sourceVisible[source] })}/><span className={`checkmark ${source}`}>✓</span><span>{sourceLabel[source]}</span><em>{connected[source] ? "연결됨" : configured[source] ? "미연결" : "설정 필요"}</em></label>{connected[source] && sourceVisible[source] && <div className="google-calendar-children">{calendars.filter(c => c.source === source).map(c => { const key = `${source}:${c.id}`; return <label className="calendar-row calendar-child" key={key}><input type="checkbox" checked={calendarVisible[key] !== false} onChange={() => toggleCalendar(key)}/><span className="checkmark google-child" style={{backgroundColor:c.color}}>✓</span><span className="calendar-child-name">{c.name}</span>{c.primary && <em>기본</em>}</label>; })}</div>}</Fragment>)}
-          {connected.icloud ? <form action="/api/icloud/disconnect" method="post"><button className="connect-calendar">iCloud 연결 해제</button></form> : <form action="/api/icloud/connect" method="post"><button className="connect-calendar">+ &nbsp;iCloud 캘린더 연결</button></form>}
-          {connected.google ? <form action="/api/google/disconnect" method="post"><button className="connect-calendar">Google 연결 해제</button></form> : <a className="connect-calendar" href={configured.google ? "/api/google/connect" : "#"}>+ &nbsp;Google 캘린더 연결</a>}
-          {connected.daou ? <form action="/api/caldav/disconnect" method="post"><button className="connect-calendar">회사 일정 연결 해제</button></form> : <button className="connect-calendar" onClick={() => setCalDavModal(true)}>+ &nbsp;회사 일정 연결</button>}
+          {connected.icloud ? <button className="connect-calendar" onClick={() => disconnectSource("icloud")}>iCloud 연결 해제</button> : <button className="connect-calendar" onClick={() => setICloudModal(true)}>+ &nbsp;iCloud 캘린더 연결</button>}
+          {connected.google ? <button className="connect-calendar" onClick={() => disconnectSource("google")}>Google 연결 해제</button> : <a className="connect-calendar" href={configured.google ? "/api/google/connect" : "#"}>+ &nbsp;Google 캘린더 연결</a>}
+          {connected.daou ? <button className="connect-calendar" onClick={() => disconnectSource("daou")}>회사 일정 연결 해제</button> : <button className="connect-calendar" onClick={() => setCalDavModal(true)}>+ &nbsp;회사 일정 연결</button>}
         </section>
         <div className="sync-card"><span className="sync-icon">⇅</span><div><b>{loading ? "동기화 중" : "모두 동기화됨"}</b><small>{loading ? "일정을 불러오고 있어요" : "최신 일정 표시 중"}</small></div><span className="status-dot"/></div><p className="privacy-note">연결된 캘린더에 직접 저장됩니다.</p>
       </aside>
@@ -115,6 +129,7 @@ export default function Home() {
     </div>
     {editorOpen && <EventEditor form={form} setForm={setForm} calendars={calendars} editing={editing} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveEvent} onDelete={deleteEvent}/>} 
     {settingsOpen && <SettingsModal calendars={writableCalendars} defaultCalendarKey={defaultCalendarKey || firstCalendarKey} autoSyncMinutes={autoSyncMinutes} showLunar={showLunar} onDefaultCalendar={changeDefaultCalendar} onAutoSync={changeAutoSync} onToggleLunar={toggleLunar} onClose={() => setSettingsOpen(false)}/>} 
+    {iCloudModal && <div className="modal-backdrop" onMouseDown={() => !iCloudConnecting && setICloudModal(false)}><section className="connect-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={() => setICloudModal(false)}>×</button><span className="modal-icon icloud-connect-icon">●</span><h2>iCloud 캘린더 연결</h2><p>Apple 계정과 앱 전용 암호를 입력하세요. 암호화된 연결정보만 OnCal 계정에 저장됩니다.</p><label><span>Apple 계정</span><input type="email" autoComplete="username" placeholder="name@example.com" value={iCloudForm.email} onChange={e=>setICloudForm({...iCloudForm,email:e.target.value})}/></label><label><span>앱 전용 암호</span><input type="password" autoComplete="current-password" placeholder="xxxx-xxxx-xxxx-xxxx" value={iCloudForm.password} onChange={e=>setICloudForm({...iCloudForm,password:e.target.value})}/></label><small>일반 Apple 계정 암호가 아니라 appleid.apple.com에서 발급한 앱 전용 암호를 사용하세요.</small><button className="modal-connect" disabled={iCloudConnecting||!iCloudForm.email||!iCloudForm.password} onClick={connectICloud}>{iCloudConnecting?"연결 확인 중…":"안전하게 연결"}</button></section></div>}
     {calDavModal && <div className="modal-backdrop" onMouseDown={() => !calDavConnecting && setCalDavModal(false)}><section className="connect-modal" onMouseDown={e => e.stopPropagation()}><button className="modal-close" onClick={() => setCalDavModal(false)}>×</button><span className="modal-icon">↻</span><h2>회사 일정 연결</h2><p>회사에서 안내받은 CalDAV 정보를 입력하세요.</p><label><span>회사 일정 서버</span><input placeholder="예: gw.company.co.kr" value={calDavForm.serverUrl} onChange={e => setCalDavForm({...calDavForm,serverUrl:e.target.value})}/></label><label><span>아이디 또는 이메일</span><input value={calDavForm.email} onChange={e => setCalDavForm({...calDavForm,email:e.target.value})}/></label><label><span>비밀번호 또는 앱 암호</span><input type="password" value={calDavForm.password} onChange={e => setCalDavForm({...calDavForm,password:e.target.value})}/></label><small>가능하면 앱 전용 암호를 사용하세요.</small><button className="modal-connect" disabled={calDavConnecting || !calDavForm.serverUrl || !calDavForm.email || !calDavForm.password} onClick={connectCalDav}>{calDavConnecting ? "연결 확인 중…" : "연결하기"}</button></section></div>}
     {notice && <div className="toast"><span>✓</span>{notice}</div>}
   </main>;
@@ -138,6 +153,13 @@ function TimePicker({ value, onChange }: { value: string; onChange: (value: stri
   const update = (nextPeriod: string, nextHour: number, nextMinute: number) => { const hour24 = nextHour % 12 + (nextPeriod === "PM" ? 12 : 0); onChange(`${pad(hour24)}:${pad(nextMinute)}`); };
   const minutes = [...new Set([...Array.from({length:12},(_,i)=>i*5), minuteValue])].sort((a,b)=>a-b);
   return <div className="time-picker" aria-label="시간 선택"><select aria-label="오전 오후" value={period} onChange={e=>update(e.target.value,hour12,minuteValue)}><option value="AM">오전</option><option value="PM">오후</option></select><select aria-label="시" value={hour12} onChange={e=>update(period,Number(e.target.value),minuteValue)}>{Array.from({length:12},(_,i)=>i+1).map(h=><option key={h} value={h}>{pad(h)}시</option>)}</select><select aria-label="분" value={minuteValue} onChange={e=>update(period,hour12,Number(e.target.value))}>{minutes.map(m=><option key={m} value={m}>{pad(m)}분</option>)}</select></div>;
+}
+
+function AuthScreen({ onSignedIn }: { onSignedIn: (email:string)=>void }) {
+  const [mode,setMode]=useState<"signin"|"signup">("signin");
+  const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [busy,setBusy]=useState(false); const [message,setMessage]=useState("");
+  const submit=async()=>{ if(!email||password.length<6){setMessage("이메일과 6자 이상의 비밀번호를 입력해 주세요.");return;} setBusy(true); setMessage(""); const supabase=getSupabaseBrowserClient(); if(mode==="signin"){const {data,error}=await supabase.auth.signInWithPassword({email,password}); if(error)setMessage(error.message==="Invalid login credentials"?"이메일 또는 비밀번호가 맞지 않습니다.":error.message); else if(data.user)onSignedIn(data.user.email||email);}else{const {data,error}=await supabase.auth.signUp({email,password,options:{emailRedirectTo:`${location.origin}/auth/callback`}}); if(error)setMessage(error.message); else if(data.session)onSignedIn(data.user?.email||email); else setMessage("확인 이메일을 보냈습니다. 이메일의 인증 링크를 눌러주세요.");} setBusy(false);};
+  return <main className="auth-page"><section className="auth-card"><div className="auth-brand"><span className="brand-mark"><i/><i/><i/></span><b>OnCal</b></div><div className="auth-copy"><span>모든 캘린더를 한곳에서</span><h1>{mode==="signin"?"다시 만나 반가워요":"OnCal 계정 만들기"}</h1><p>한 번 연결하면 PC와 모바일에서 같은 캘린더를 바로 사용할 수 있어요.</p></div><div className="auth-tabs"><button className={mode==="signin"?"active":""} onClick={()=>{setMode("signin");setMessage("");}}>로그인</button><button className={mode==="signup"?"active":""} onClick={()=>{setMode("signup");setMessage("");}}>회원가입</button></div><label><span>이메일</span><input type="email" autoComplete="email" placeholder="name@example.com" value={email} onChange={e=>setEmail(e.target.value)}/></label><label><span>비밀번호</span><input type="password" autoComplete={mode==="signin"?"current-password":"new-password"} placeholder="6자 이상 입력" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()}/></label>{message&&<p className="auth-message">{message}</p>}<button className="auth-submit" disabled={busy} onClick={submit}>{busy?"처리 중…":mode==="signin"?"이메일로 로그인":"무료로 시작하기"}</button><small className="auth-security">연결정보는 암호화되어 사용자 계정별로 분리 보관됩니다.</small></section><aside className="auth-visual"><div><span>✓ Google</span><span>✓ iCloud</span><span>✓ 회사 일정</span></div><h2>연결은 한 번,<br/>일정은 모든 기기에서.</h2><p>Windows 웹과 아이폰·안드로이드 앱이 같은 OnCal 계정으로 이어집니다.</p></aside></main>;
 }
 
 function SettingsModal({ calendars, defaultCalendarKey, autoSyncMinutes, showLunar, onDefaultCalendar, onAutoSync, onToggleLunar, onClose }: { calendars: CalendarItem[]; defaultCalendarKey: string; autoSyncMinutes: number; showLunar: boolean; onDefaultCalendar: (key:string)=>void; onAutoSync:(minutes:number)=>void; onToggleLunar:()=>void; onClose:()=>void }) {

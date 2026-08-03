@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { companyCalDavCookie, discoverCompanyCalendars, sealCompanyCredentials, validateCalDavServer } from "@/app/lib/company-caldav";
+import { discoverCompanyCalendars, sealCompanyCredentials, validateCalDavServer } from "@/app/lib/company-caldav";
+import { saveConnection } from "@/app/lib/connection-store";
 
 export async function POST(request: Request) {
   try {
@@ -8,9 +9,8 @@ export async function POST(request: Request) {
     const credentials = { serverUrl: validateCalDavServer(input.serverUrl), email: input.email.trim(), password: input.password };
     const calendars = await discoverCompanyCalendars(credentials);
     if (!calendars.length) return NextResponse.json({ error: "불러올 수 있는 캘린더가 없습니다." }, { status: 400 });
-    const response = NextResponse.json({ connected: true, calendarCount: calendars.length });
-    response.cookies.set(companyCalDavCookie.name, await sealCompanyCredentials(credentials), companyCalDavCookie.options);
-    return response;
+    await saveConnection("caldav", await sealCompanyCredentials(credentials), credentials.email);
+    return NextResponse.json({ connected: true, calendarCount: calendars.length });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     const messages: Record<string, string> = {
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       CALDAV_PRINCIPAL_NOT_FOUND: "서버 로그인은 됐지만 사용자 캘린더 경로를 확인하지 못했습니다.",
       CALDAV_HOME_NOT_FOUND: "사용자 인증은 됐지만 캘린더 보관함 경로를 확인하지 못했습니다.",
     };
-    const message = code.includes("주소") ? code : messages[code] || `서버에는 접속했지만 CalDAV 응답을 해석하지 못했습니다. (진단: ${code})`;
+    const message = code === "AUTH_REQUIRED" ? "먼저 OnCal에 로그인해 주세요." : code.includes("주소") ? code : messages[code] || `서버에는 접속했지만 CalDAV 응답을 해석하지 못했습니다. (진단: ${code})`;
     return NextResponse.json({ error: message, code }, { status: 400 });
   }
 }

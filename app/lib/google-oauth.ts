@@ -20,7 +20,7 @@ function base64ToBytes(value: string) {
 }
 
 async function encryptionKey() {
-  const secret = process.env.GOOGLE_TOKEN_SECRET;
+  const secret = process.env.CALENDAR_CREDENTIAL_SECRET || process.env.GOOGLE_TOKEN_SECRET;
   if (!secret) throw new Error("GOOGLE_TOKEN_SECRET is not configured");
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);

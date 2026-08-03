@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { googleConfig, googleCookie, sealTokens } from "@/app/lib/google-oauth";
+import { googleConfig, sealTokens } from "@/app/lib/google-oauth";
+import { requireOnCalUser, saveConnection } from "@/app/lib/connection-store";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const user = await requireOnCalUser();
     const config = googleConfig(origin);
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -36,8 +38,8 @@ export async function GET(request: NextRequest) {
       refresh_token: token.refresh_token,
       expires_at: Date.now() + token.expires_in * 1000,
     });
+    await saveConnection("google", sealed, user.email || "Google");
     const response = NextResponse.redirect(`${origin}/?google=connected`);
-    response.cookies.set(googleCookie.name, sealed, googleCookie.options);
     response.cookies.delete("oncal_google_state");
     return response;
   } catch {

@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server";
-import { discoverICloudCalendars, iCloudCookie, sealICloudCredentials } from "@/app/lib/icloud-caldav";
+import { discoverICloudCalendars, sealICloudCredentials } from "@/app/lib/icloud-caldav";
+import { saveConnection } from "@/app/lib/connection-store";
 
 export async function POST(request: Request) {
-  const origin = process.env.PUBLIC_APP_URL || new URL(request.url).origin;
-  const email = process.env.ICLOUD_BOOTSTRAP_EMAIL;
-  const password = process.env.ICLOUD_BOOTSTRAP_PASSWORD;
-  if (!email || !password) return NextResponse.redirect(`${origin}/?icloud=setup-required`, 303);
   try {
-    const credentials = { email, password };
+    const input = await request.json() as { email?: string; password?: string };
+    if (!input.email || !input.password) return NextResponse.json({ error: "Apple 계정과 앱 전용 암호를 입력해 주세요." }, { status: 400 });
+    const credentials = { email: input.email.trim(), password: input.password };
     const calendars = await discoverICloudCalendars(credentials);
-    if (!calendars.length) throw new Error("No iCloud calendars found");
-    const response = NextResponse.redirect(`${origin}/?icloud=connected`, 303);
-    response.cookies.set(iCloudCookie.name, await sealICloudCredentials(credentials), iCloudCookie.options);
-    return response;
-  } catch {
-    return NextResponse.redirect(`${origin}/?icloud=failed`, 303);
+    if (!calendars.length) throw new Error("No calendars");
+    await saveConnection("icloud", await sealICloudCredentials(credentials), credentials.email);
+    return NextResponse.json({ connected: true, calendarCount: calendars.length });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return NextResponse.json({ error: "먼저 OnCal에 로그인해 주세요." }, { status: 401 });
+    return NextResponse.json({ error: "iCloud 연결에 실패했어요. Apple 계정과 앱 전용 암호를 확인해 주세요." }, { status: 400 });
   }
 }

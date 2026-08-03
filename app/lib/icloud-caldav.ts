@@ -23,7 +23,7 @@ function base64ToBytes(value: string) {
 }
 
 async function encryptionKey() {
-  const secret = process.env.ICLOUD_CREDENTIAL_SECRET;
+  const secret = process.env.CALENDAR_CREDENTIAL_SECRET;
   if (!secret) throw new Error("iCloud encryption is not configured");
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -190,8 +190,3 @@ export async function updateCalDavEvent(credentials: ICloudCredentials, resource
 export async function deleteCalDavEvent(credentials: ICloudCredentials, resourceUrl: string) {
   await davWrite(resourceUrl, credentials, "DELETE");
 }
-
-export const iCloudCookie = {
-  name: "oncal_icloud",
-  options: { httpOnly: true, secure: true, sameSite: "lax" as const, path: "/", maxAge: 60 * 60 * 24 * 30 },
-};

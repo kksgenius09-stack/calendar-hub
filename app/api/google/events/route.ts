@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { googleConfig, googleCookie, openTokens, sealTokens, type GoogleTokens } from "@/app/lib/google-oauth";
+import { googleConfig, openTokens, sealTokens, type GoogleTokens } from "@/app/lib/google-oauth";
+import { loadConnection, saveConnection } from "@/app/lib/connection-store";
 
 type GoogleCalendar = { id: string; summary?: string; primary?: boolean; selected?: boolean; backgroundColor?: string };
 type GoogleEvent = { id: string; summary?: string; recurrence?: string[]; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string } };
 
 async function access(request: NextRequest) {
-  const sealed = request.cookies.get(googleCookie.name)?.value;
+  const sealed = (await loadConnection("google"))?.encrypted;
   if (!sealed) throw new Error("NOT_CONNECTED");
   const tokens = await openTokens(sealed);
   let refreshed = false;
@@ -22,12 +23,12 @@ async function access(request: NextRequest) {
 
 async function finish(data: unknown, tokens?: GoogleTokens, refreshed?: boolean, status = 200) {
   const response = NextResponse.json(data, { status });
-  if (tokens && refreshed) response.cookies.set(googleCookie.name, await sealTokens(tokens), googleCookie.options);
+  if (tokens && refreshed) await saveConnection("google", await sealTokens(tokens), "Google");
   return response;
 }
 
 export async function GET(request: NextRequest) {
-  const configured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_TOKEN_SECRET);
+  const configured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.CALENDAR_CREDENTIAL_SECRET);
   try {
     const auth = await access(request);
     const from = request.nextUrl.searchParams.get("from") || new Date(Date.now() - 31 * 86400000).toISOString();

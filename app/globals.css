@@ -127,6 +127,35 @@ button { color: inherit; }
 .event:hover { filter: brightness(.97); }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 9px; max-width: calc(100vw - 30px); background: #252936; color: #fff; padding: 12px 17px; border-radius: 10px; font-size: 12px; box-shadow: 0 12px 30px #161a2470; }
 .toast span { color: #76dfb4; }
+.auth-loading { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 14px; background: #f7f7fb; color: #858b95; font-size: 12px; }
+.auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(420px,560px) 1fr; background: #fff; }
+.auth-card { width: min(390px,calc(100vw - 36px)); margin: auto; padding: 36px 0; }
+.auth-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 54px; font-size: 20px; }
+.auth-copy > span { color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+.auth-copy h1 { margin: 10px 0 8px; font-size: 29px; letter-spacing: -1.2px; }
+.auth-copy p { margin: 0 0 28px; color: #848b96; font-size: 12px; line-height: 1.65; }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 22px; padding: 4px; border-radius: 10px; background: #f1f2f5; }
+.auth-tabs button { height: 34px; border: 0; border-radius: 7px; background: transparent; color: #7d8490; font-size: 11px; cursor: pointer; }
+.auth-tabs button.active { background: #fff; color: var(--accent); box-shadow: 0 2px 7px #25293612; font-weight: 800; }
+.auth-card > label { display: block; margin-top: 14px; }
+.auth-card > label span { display: block; margin-bottom: 7px; color: #4f5662; font-size: 11px; font-weight: 700; }
+.auth-card > label input { width: 100%; height: 46px; padding: 0 13px; border: 1px solid #dfe1e7; border-radius: 10px; outline: none; font-size: 12px; }
+.auth-card > label input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #5b53e914; }
+.auth-message { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: #f2f0ff; color: #5b53c6; font-size: 10px; line-height: 1.5; }
+.auth-submit { width: 100%; height: 46px; margin-top: 20px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 800; cursor: pointer; }
+.auth-submit:disabled { opacity: .6; }
+.auth-security { display: block; margin-top: 15px; color: #9ba1aa; text-align: center; font-size: 9px; }
+.auth-visual { display: flex; flex-direction: column; justify-content: center; padding: 80px; background: linear-gradient(145deg,#282449,#5b53e9); color: #fff; overflow: hidden; }
+.auth-visual > div { display: flex; gap: 8px; flex-wrap: wrap; }
+.auth-visual > div span { padding: 8px 12px; border: 1px solid #ffffff2b; border-radius: 20px; background: #ffffff12; font-size: 10px; }
+.auth-visual h2 { margin: 30px 0 14px; font-size: clamp(32px,4vw,56px); line-height: 1.12; letter-spacing: -2px; }
+.auth-visual p { max-width: 430px; color: #ffffffb8; font-size: 13px; line-height: 1.7; }
+.account-menu { position: relative; }
+.account-popover { position: absolute; z-index: 20; top: 44px; right: 0; width: 245px; padding: 15px; border: 1px solid #e3e4e9; border-radius: 11px; background: #fff; box-shadow: 0 16px 40px #24283625; }
+.account-popover b, .account-popover small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-popover b { font-size: 11px; }.account-popover small { margin: 5px 0 12px; color: #969ca5; font-size: 9px; }
+.account-popover button { width: 100%; height: 32px; border: 0; border-radius: 7px; background: #f1f2f5; font-size: 10px; cursor: pointer; }
+.icloud-connect-icon { background: #eeedff; color: #5b53e9; }
 
 .calendar-loading { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%,-50%); padding: 10px 14px; border-radius: 8px; background: #252936; color: #fff; font-size: 11px; }
 .agenda-card { position: relative; overflow: auto; }
@@ -183,6 +212,7 @@ button { color: inherit; }
 .settings-footer .modal-connect { width: 88px; margin-left: auto; }
 
 @media (max-width: 900px) {
+  .auth-page { grid-template-columns: 1fr; }.auth-visual { display: none; }.auth-brand { margin-bottom: 38px; }
   .topbar { padding: 0 16px; height: 64px; gap: 12px; }.brand { min-width: auto; }.brand > span:last-child { display: none; }
   .mobile-menu { display: flex; width: 31px; height: 31px; border: 0; border-radius: 8px; background: #f1f2f5; flex-direction: column; justify-content: center; gap: 5px; padding: 8px; }
   .mobile-menu span { height: 1px; background: #4d5561; width: 100%; }

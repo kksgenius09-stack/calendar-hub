@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { googleConfig } from "@/app/lib/google-oauth";
+import { requireOnCalUser } from "@/app/lib/connection-store";
 
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
   try {
+    await requireOnCalUser();
     const config = googleConfig(origin);
     const state = crypto.randomUUID();
     const params = new URLSearchParams({
