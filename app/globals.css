@@ -142,6 +142,8 @@ button { color: inherit; }
 .agenda-events .event { padding: 9px 10px; font-size: 11px; }
 .empty-day { width: 100%; padding: 24px 4px; border: 1px dashed #dfe1e7; border-radius: 8px; background: #fafafd; color: #a1a6af; font-size: 10px; }
 .event-editor select { width: 100%; height: 42px; padding: 0 11px; border: 1px solid #dfe1e7; border-radius: 9px; background: #fff; font-size: 12px; }
+.editor-fields { margin: 0; padding: 0; border: 0; }
+.editor-fields:disabled { opacity: .72; }
 .editor-title { margin-bottom: 4px; }
 .editor-title > span { display: inline-block; padding: 4px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: 9px; font-weight: 800; }
 .editor-title h2 { margin: 8px 0 2px; }
