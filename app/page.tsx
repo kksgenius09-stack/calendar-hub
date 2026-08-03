@@ -24,11 +24,13 @@ const isCalendarWritable = (calendar: CalendarItem) => calendar.source !== "daou
 function lunarLabel(d: Date) { const lunar = new KoreanLunarCalendar(); if (!lunar.setSolarDate(d.getFullYear(), d.getMonth() + 1, d.getDate())) return ""; const v = lunar.getLunarCalendar(); return `음 ${v.intercalation ? "윤" : ""}${v.month}.${v.day}`; }
 function rangeFor(cursor: Date, view: View) { if (view === "month") { const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const start = addDays(first, -first.getDay()); return { start, end: addDays(start, 42) }; } if (view === "week") { const start = addDays(startOfDay(cursor), -cursor.getDay()); return { start, end: addDays(start, 7) }; } return { start: startOfDay(cursor), end: addDays(startOfDay(cursor), 1) }; }
 function defaultForm(date: Date, calendarKey = "") : EventForm { return { title: "", date: dateKey(date), startTime: "09:00", endTime: "10:00", allDay: false, recurrence: "", calendarKey }; }
+async function beginGoogleConnection(setBusy:(busy:boolean)=>void,setMessage:(message:string)=>void) { setBusy(true); setMessage(""); const supabase=getSupabaseBrowserClient(); const {error}=await supabase.auth.signInWithOAuth({ provider:"google", options:{ redirectTo:`${location.origin}/auth/callback?next=/?google=connected`, scopes:"https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events", queryParams:{ access_type:"offline", prompt:"consent", include_granted_scopes:"true" } } }); if(error){setMessage(error.message.includes("provider is not enabled")?"Google 로그인을 사용하려면 관리자 설정이 필요합니다.":"Google 로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");setBusy(false);} }
 
 export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [guestEntered, setGuestEntered] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [view, setView] = useState<View>("month");
@@ -99,10 +101,11 @@ export default function Home() {
   const connectICloud = async () => { setICloudConnecting(true); try { const response = await fetch("/api/icloud/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(iCloudForm) }); const data = await response.json(); if (!response.ok || !data.connected) throw new Error(data.error || "연결에 실패했습니다."); setICloudModal(false); setNotice("iCloud 캘린더가 OnCal 계정에 안전하게 저장됐어요."); await loadEvents(); } catch (e) { setNotice(e instanceof Error ? e.message : "연결에 실패했습니다."); } finally { setICloudConnecting(false); } };
   const connectCalDav = async () => { setCalDavConnecting(true); try { const response = await fetch("/api/caldav/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(calDavForm) }); const data = await response.json(); if (!response.ok || !data.connected) throw new Error(data.error || "연결에 실패했습니다."); location.reload(); } catch (e) { setNotice(e instanceof Error ? e.message : "연결에 실패했습니다."); setCalDavConnecting(false); } };
   const disconnectSource = async (source: Source) => { const path = source === "icloud" ? "/api/icloud/disconnect" : source === "google" ? "/api/google/disconnect" : "/api/caldav/disconnect"; const response = await fetch(path, { method: "POST", redirect: "follow" }); if (response.ok) { setNotice(`${sourceLabel[source]} 연결을 해제했어요.`); await loadEvents(); } else setNotice("연결을 해제하지 못했어요."); };
-  const signOut = async () => { await getSupabaseBrowserClient().auth.signOut(); setEvents([]); setCalendars([]); setConnected({ icloud:false, google:false, daou:false }); setAccountOpen(false); };
+  const signOut = async () => { await getSupabaseBrowserClient().auth.signOut(); setEvents([]); setCalendars([]); setConnected({ icloud:false, google:false, daou:false }); setAccountOpen(false); setGuestEntered(false); };
   const quickAdd = () => { if (!quickInput.trim()) return; openCreate(cursor, quickInput.trim()); setQuickInput(""); };
 
   if (!authReady) return <div className="auth-loading"><span className="brand-mark"><i/><i/><i/></span><p>OnCal을 준비하고 있어요…</p></div>;
+  if (!userEmail && !guestEntered) return <LandingScreen onExplore={()=>setGuestEntered(true)}/>;
 
   return <main className="app-shell">
     <header className="topbar">
@@ -158,8 +161,13 @@ function TimePicker({ value, onChange }: { value: string; onChange: (value: stri
 
 function AccountConnectModal({onClose}:{onClose:()=>void}) {
   const [busy,setBusy]=useState(false); const [message,setMessage]=useState("");
-  const continueWithGoogle=async()=>{ setBusy(true); setMessage(""); const supabase=getSupabaseBrowserClient(); const {error}=await supabase.auth.signInWithOAuth({ provider:"google", options:{ redirectTo:`${location.origin}/auth/callback?next=/?google=connected`, scopes:"https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events", queryParams:{ access_type:"offline", prompt:"consent", include_granted_scopes:"true" } } }); if(error){setMessage(error.message.includes("provider is not enabled")?"Google 로그인을 사용하려면 관리자 설정이 필요합니다.":"Google 로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");setBusy(false);} };
+  const continueWithGoogle=()=>beginGoogleConnection(setBusy,setMessage);
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="connect-modal account-connect-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="auth-brand"><span className="brand-mark"><i/><i/><i/></span><b>OnCal</b></div><div className="auth-copy"><span>내 캘린더 연결하기</span><h1>연결할 때만<br/>간편하게 시작하세요</h1><p>둘러보기에는 로그인이 필요 없습니다. Google을 연결하면 계정 생성과 캘린더 동기화가 한 번에 완료됩니다.</p></div><button className="google-auth-button" disabled={busy} onClick={continueWithGoogle}><span className="google-g">G</span><b>{busy?"Google로 이동 중…":"Google 캘린더 연결"}</b></button>{message&&<p className="auth-message">{message}</p>}<small className="auth-security">iCloud와 회사 일정은 계정 연결 후 추가할 수 있습니다.</small></section></div>;
+}
+
+function LandingScreen({onExplore}:{onExplore:()=>void}) {
+  const [busy,setBusy]=useState(false); const [message,setMessage]=useState("");
+  return <main className="auth-page landing-page"><section className="auth-card"><div className="auth-brand"><span className="brand-mark"><i/><i/><i/></span><b>OnCal</b></div><div className="auth-copy"><span>모든 캘린더를 한곳에서</span><h1>내 모든 일정을<br/>하나의 달력으로</h1><p>Google·iCloud·회사 일정을 한눈에 확인하고 PC와 모바일에서 그대로 이어서 사용하세요.</p></div><div className="landing-actions"><button className="google-auth-button" disabled={busy} onClick={()=>beginGoogleConnection(setBusy,setMessage)}><span className="google-g">G</span><b>{busy?"Google로 이동 중…":"Google로 시작하기"}</b></button><button className="explore-button" onClick={onExplore}>로그인 없이 둘러보기</button></div>{message&&<p className="auth-message">{message}</p>}<div className="auth-benefits"><span><i>✓</i> 회원가입과 Google 연결을 한 번에</span><span><i>✓</i> 달력은 로그인 없이 먼저 체험</span><span><i>✓</i> 연결정보는 암호화해 안전하게 보관</span></div></section><aside className="auth-visual"><div><span>✓ Google</span><span>✓ iCloud</span><span>✓ 회사 일정</span></div><h2>연결은 한 번,<br/>일정은 모든 기기에서.</h2><p>업무와 개인 일정을 오가느라 여러 화면을 열 필요 없이 OnCal 한곳에서 관리하세요.</p></aside></main>;
 }
 
 function SettingsModal({ calendars, defaultCalendarKey, autoSyncMinutes, showLunar, onDefaultCalendar, onAutoSync, onToggleLunar, onClose }: { calendars: CalendarItem[]; defaultCalendarKey: string; autoSyncMinutes: number; showLunar: boolean; onDefaultCalendar: (key:string)=>void; onAutoSync:(minutes:number)=>void; onToggleLunar:()=>void; onClose:()=>void }) {
