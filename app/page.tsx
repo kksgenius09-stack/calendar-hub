@@ -42,7 +42,18 @@ const sourceLabel: Record<Source, string> = {
 };
 
 const days = ["일", "월", "화", "수", "목", "금", "토"];
-const leadingDays = [27, 28, 29, 30, 31];
+const calendarYear = 2026;
+const calendarMonth = 7;
+const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+const leadingCount = new Date(calendarYear, calendarMonth, 1).getDay();
+const previousMonthDays = new Date(calendarYear, calendarMonth, 0).getDate();
+const leadingDays = Array.from({ length: leadingCount }, (_, index) => previousMonthDays - leadingCount + index + 1);
+const trailingDays = Array.from({ length: 42 - leadingCount - daysInMonth }, (_, index) => index + 1);
+const monthCells = [
+  ...leadingDays.map((day) => ({ day, muted: true })),
+  ...Array.from({ length: daysInMonth }, (_, index) => ({ day: index + 1, muted: false })),
+  ...trailingDays.map((day) => ({ day, muted: true })),
+];
 
 export default function Home() {
   const [visible, setVisible] = useState<Record<Source, boolean>>({
@@ -70,8 +81,10 @@ export default function Home() {
   const [calDavModal, setCalDavModal] = useState(false);
   const [calDavForm, setCalDavForm] = useState({ serverUrl: "", email: "", password: "" });
   const [calDavConnecting, setCalDavConnecting] = useState(false);
+  const [today, setToday] = useState<Date | null>(null);
 
   useEffect(() => {
+    setToday(new Date());
     fetch("/api/google/events")
       .then((response) => response.json())
       .then((data: { connected?: boolean; configured?: boolean; calendars?: GoogleCalendarItem[]; events?: Array<{ id: string; calendarId: string; calendarColor?: string; title: string; start?: string; allDay?: boolean }> }) => {
@@ -169,6 +182,11 @@ export default function Home() {
     }
   }, []);
 
+  const todayLabel = today
+    ? today.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })
+    : "오늘";
+  const todayDay = today && today.getFullYear() === calendarYear && today.getMonth() === calendarMonth ? today.getDate() : null;
+
   const filteredEvents = useMemo(
     () => [
       ...(companyConnected ? companyEvents : events.filter((event) => event.source === "daou")),
@@ -238,7 +256,7 @@ export default function Home() {
           <button aria-label="이전 달">‹</button>
           <button className="today-button">오늘</button>
           <button aria-label="다음 달">›</button>
-          <h1>2026년 8월</h1>
+          <div className="date-title"><h1>{calendarYear}년 {calendarMonth + 1}월</h1><span>오늘 · {todayLabel}</span></div>
         </div>
         <div className="header-actions">
           <button className="search-button" aria-label="일정 검색">⌕</button>
@@ -254,11 +272,11 @@ export default function Home() {
           <button className="new-event"><span>+</span> 새 일정</button>
 
           <section className="mini-calendar">
-            <div className="mini-title"><b>2026년 8월</b><span>‹&nbsp;&nbsp; ›</span></div>
+            <div className="mini-title"><b>{calendarYear}년 {calendarMonth + 1}월</b><span>‹&nbsp;&nbsp; ›</span></div>
             <div className="mini-grid mini-week">{days.map((d) => <span key={d}>{d}</span>)}</div>
             <div className="mini-grid">
-              {[27,28,29,30,31,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,1,2,3,4,5,6].map((d, i) => (
-                <span key={`${d}-${i}`} className={`${i < 5 || i > 35 ? "muted" : ""} ${d === 2 && i < 10 ? "selected" : ""}`}>{d}</span>
+              {monthCells.map((cell, index) => (
+                <span key={`${cell.day}-${index}`} className={`${cell.muted ? "muted" : ""} ${!cell.muted && cell.day === todayDay ? "selected" : ""}`}>{cell.day}</span>
               ))}
             </div>
           </section>
@@ -389,10 +407,10 @@ export default function Home() {
             </div>
             <div className="month-grid">
               {leadingDays.map((day) => <DayCell key={`prev-${day}`} day={day} muted events={[]} />)}
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                <DayCell key={day} day={day} today={day === 2} events={filteredEvents.filter((e) => e.day === day)} />
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => (
+                <DayCell key={day} day={day} today={day === todayDay} events={filteredEvents.filter((e) => e.day === day)} />
               ))}
-              {Array.from({ length: 6 }, (_, i) => i + 1).map((day) => <DayCell key={`next-${day}`} day={day} muted events={[]} />)}
+              {trailingDays.map((day) => <DayCell key={`next-${day}`} day={day} muted events={[]} />)}
             </div>
           </div>
         </section>

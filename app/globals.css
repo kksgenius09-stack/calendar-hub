@@ -27,6 +27,8 @@ button { color: inherit; }
 .date-nav button:hover, .search-button:hover { background: #f2f3f6; }
 .date-nav .today-button { font-size: 13px; border: 1px solid var(--line); padding: 0 12px; margin: 0 4px; }
 .date-nav h1 { font-size: 19px; margin: 0 0 0 11px; letter-spacing: -.5px; }
+.date-title { display: flex; flex-direction: column; gap: 2px; }
+.date-title span { margin-left: 11px; color: #8d939d; font-size: 9px; font-weight: 600; }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .search-button { font-size: 24px; transform: rotate(-20deg); }
 .view-switch { display: flex; padding: 3px; background: #f1f2f5; border-radius: 9px; }
@@ -117,7 +119,7 @@ button { color: inherit; }
   .topbar { padding: 0 16px; height: 64px; gap: 12px; }.brand { min-width: auto; }.brand > span:last-child { display: none; }
   .mobile-menu { display: flex; width: 31px; height: 31px; border: 0; border-radius: 8px; background: #f1f2f5; flex-direction: column; justify-content: center; gap: 5px; padding: 8px; }
   .mobile-menu span { height: 1px; background: #4d5561; width: 100%; }
-  .date-nav h1 { font-size: 15px; margin-left: 4px; }.date-nav > button:not(.today-button) { display: none; }.date-nav .today-button { margin: 0; }
+  .date-nav h1 { font-size: 15px; margin-left: 4px; }.date-title span { margin-left: 4px; font-size: 8px; }.date-nav > button:not(.today-button) { display: none; }.date-nav .today-button { margin: 0; }
   .search-button, .view-switch { display: none; }
   .workspace { min-height: calc(100vh - 64px); }.sidebar { position: fixed; z-index: 9; left: 0; top: 64px; bottom: 0; transform: translateX(-102%); transition: transform .22s ease; box-shadow: 10px 0 30px #15182420; }.sidebar.open { transform: translateX(0); }
   .calendar-area { padding: 13px 10px; }.quick-add { margin-bottom: 11px; }.shortcut { display: none; }
