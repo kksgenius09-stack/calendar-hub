@@ -52,19 +52,23 @@ export function validateCalDavServer(value: string) {
 export async function discoverCompanyCalendars(credentials: CompanyCalDavCredentials) {
   const server = new URL(credentials.serverUrl);
   const directFirst = server.pathname !== "/";
+  const accountPrincipal = new URL(`/principals/users/${encodeURIComponent(credentials.email)}/`, server.origin).toString();
   const candidates = directFirst
     ? [credentials.serverUrl, new URL("/.well-known/caldav", server.origin).toString()]
-    : [new URL("/.well-known/caldav", server.origin).toString(), credentials.serverUrl];
+    : [accountPrincipal, new URL("/.well-known/caldav", server.origin).toString(), credentials.serverUrl];
   let lastError: unknown;
+  const errorCodes: string[] = [];
   for (const candidate of [...new Set(candidates)]) {
     try {
       const calendars = await discoverICloudCalendars(credentials, candidate);
       if (calendars.length) return calendars;
     } catch (error) {
       lastError = error;
-      if (error instanceof Error && (error.message === "CALDAV_HTTP_401" || error.message === "CALDAV_HTTP_403")) throw error;
+      if (error instanceof Error) errorCodes.push(error.message);
     }
   }
+  if (errorCodes.includes("CALDAV_HTTP_401")) throw new Error("CALDAV_HTTP_401");
+  if (errorCodes.includes("CALDAV_HTTP_403")) throw new Error("CALDAV_HTTP_403");
   throw lastError instanceof Error ? lastError : new Error("CalDAV calendar discovery failed");
 }
 

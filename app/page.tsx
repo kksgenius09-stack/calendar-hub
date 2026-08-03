@@ -405,7 +405,7 @@ export default function Home() {
             <span className="modal-icon">↻</span>
             <h2 id="caldav-title">회사 일정 연결</h2>
             <p>회사에서 안내받은 CalDAV 정보를 입력하세요. 입력한 비밀번호는 암호화되어 저장됩니다.</p>
-            <label><span>CalDAV 서버 또는 계정 URL</span><input type="text" placeholder="calendar.company.com 또는 계정 URL" value={calDavForm.serverUrl} onChange={(event) => setCalDavForm({ ...calDavForm, serverUrl: event.target.value })} /></label>
+            <label><span>회사 일정 서버</span><input type="text" placeholder="예: gw.company.co.kr" value={calDavForm.serverUrl} onChange={(event) => setCalDavForm({ ...calDavForm, serverUrl: event.target.value })} /></label>
             <label><span>아이디 또는 이메일</span><input type="text" autoComplete="username" placeholder="name@company.com" value={calDavForm.email} onChange={(event) => setCalDavForm({ ...calDavForm, email: event.target.value })} /></label>
             <label><span>비밀번호 또는 앱 암호</span><input type="password" autoComplete="current-password" placeholder="회사에서 발급받은 암호" value={calDavForm.password} onChange={(event) => setCalDavForm({ ...calDavForm, password: event.target.value })} onKeyDown={(event) => event.key === "Enter" && connectCalDav()} /></label>
             <small>일반 계정 비밀번호 대신 앱 전용 암호를 지원한다면 앱 암호 사용을 권장합니다.</small>
