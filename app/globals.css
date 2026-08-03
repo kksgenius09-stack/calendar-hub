@@ -166,6 +166,21 @@ button { color: inherit; }
 .cancel-event { margin-left: auto; background: #f0f1f4; }
 .delete-event { background: #fff0f1; color: #c94854; }
 .day-cell { cursor: pointer; }
+.settings-modal { width: min(510px,100%); }
+.settings-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.settings-heading > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 17px; }
+.settings-heading h2 { margin: 0 0 4px; }
+.settings-heading p { margin: 0; color: #8c929c; font-size: 10px; }
+.settings-group { overflow: hidden; border: 1px solid #e5e6eb; border-radius: 12px; }
+.settings-group > label, .settings-line { min-height: 76px; display: flex; align-items: center; gap: 18px; padding: 14px 16px; margin: 0; border-bottom: 1px solid #eceef1; }
+.settings-group > :last-child { border-bottom: 0; }
+.settings-group label > span, .settings-line > span { flex: 1; min-width: 0; }
+.settings-group b, .settings-line b { display: block; margin-bottom: 3px; color: #363b46; font-size: 12px; }
+.settings-group small, .settings-line small { display: block; color: #969ca6; font-size: 9px; line-height: 1.4; }
+.settings-group select { width: 155px; height: 38px; padding: 0 9px; border: 1px solid #dfe1e7; border-radius: 8px; background: #fff; font-size: 10px; }
+.settings-footer { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+.settings-footer small { color: #a0a5ad; }
+.settings-footer .modal-connect { width: 88px; margin-left: auto; }
 
 @media (max-width: 900px) {
   .topbar { padding: 0 16px; height: 64px; gap: 12px; }.brand { min-width: auto; }.brand > span:last-child { display: none; }
