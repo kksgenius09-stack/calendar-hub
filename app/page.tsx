@@ -58,6 +58,11 @@ export default function Home() {
   const [googleEvents, setGoogleEvents] = useState<EventItem[]>([]);
   const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarItem[]>([]);
   const [visibleGoogleCalendars, setVisibleGoogleCalendars] = useState<Record<string, boolean>>({});
+  const [iCloudConnected, setICloudConnected] = useState(false);
+  const [iCloudReady, setICloudReady] = useState(false);
+  const [iCloudEvents, setICloudEvents] = useState<EventItem[]>([]);
+  const [iCloudCalendars, setICloudCalendars] = useState<GoogleCalendarItem[]>([]);
+  const [visibleICloudCalendars, setVisibleICloudCalendars] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/google/events")
@@ -91,24 +96,68 @@ export default function Home() {
       })
       .catch(() => setGoogleConnected(false));
 
+    fetch("/api/icloud/events")
+      .then((response) => response.json())
+      .then((data: { connected?: boolean; configured?: boolean; calendars?: Array<{ id: string; name: string; color: string }>; events?: Array<{ id: string; calendarId: string; calendarColor?: string; title: string; start?: string; allDay?: boolean }> }) => {
+        setICloudConnected(Boolean(data.connected));
+        setICloudReady(Boolean(data.configured));
+        const calendars = (data.calendars ?? []).map((calendar) => ({ ...calendar, primary: false, selected: true }));
+        setICloudCalendars(calendars);
+        let saved: Record<string, boolean> = {};
+        try { saved = JSON.parse(localStorage.getItem("oncal-icloud-calendars") || "{}"); } catch { saved = {}; }
+        setVisibleICloudCalendars(Object.fromEntries(calendars.map((calendar) => [calendar.id, saved[calendar.id] ?? true])));
+        setICloudEvents((data.events ?? []).flatMap((event) => {
+          if (!event.start) return [];
+          const start = new Date(event.start);
+          if (Number.isNaN(start.getTime()) || start.getFullYear() !== 2026 || start.getMonth() !== 7) return [];
+          return [{
+            id: event.id,
+            day: start.getDate(),
+            title: event.title,
+            time: event.allDay ? "종일" : start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
+            source: "icloud" as const,
+            calendarId: event.calendarId,
+            color: event.calendarColor,
+          }];
+        }));
+      })
+      .catch(() => setICloudConnected(false));
+
     const googleResult = new URLSearchParams(window.location.search).get("google");
     if (googleResult === "setup-required") setNotice("Google 연동 설정이 아직 완료되지 않았어요. OAuth 인증정보를 연결해야 합니다.");
     if (googleResult === "failed") setNotice("Google 연결에 실패했어요. 잠시 후 다시 시도해 주세요.");
     if (googleResult === "connected") setNotice("Google 캘린더가 연결됐어요.");
     if (googleResult) window.history.replaceState({}, "", window.location.pathname);
+    const iCloudResult = new URLSearchParams(window.location.search).get("icloud");
+    if (iCloudResult === "setup-required") setNotice("iCloud 연결 정보가 아직 설정되지 않았어요.");
+    if (iCloudResult === "failed") setNotice("iCloud 연결에 실패했어요. Apple 계정과 앱 전용 암호를 확인해 주세요.");
+    if (iCloudResult === "connected") setNotice("iCloud 캘린더가 연결됐어요.");
+    if (iCloudResult === "disconnected") setNotice("iCloud 연결을 해제했어요.");
+    if (iCloudResult) window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
   const filteredEvents = useMemo(
-    () => [...events.filter((event) => event.source !== "google"), ...(googleConnected ? googleEvents : events.filter((event) => event.source === "google"))]
+    () => [
+      ...events.filter((event) => event.source !== "google" && event.source !== "icloud"),
+      ...(googleConnected ? googleEvents : events.filter((event) => event.source === "google")),
+      ...(iCloudConnected ? iCloudEvents : events.filter((event) => event.source === "icloud")),
+    ]
       .filter((event) => visible[event.source])
-      .filter((event) => event.source !== "google" || !googleConnected || !event.calendarId || visibleGoogleCalendars[event.calendarId]),
-    [visible, visibleGoogleCalendars, googleConnected, googleEvents],
+      .filter((event) => event.source !== "google" || !googleConnected || !event.calendarId || visibleGoogleCalendars[event.calendarId])
+      .filter((event) => event.source !== "icloud" || !iCloudConnected || !event.calendarId || visibleICloudCalendars[event.calendarId]),
+    [visible, visibleGoogleCalendars, visibleICloudCalendars, googleConnected, googleEvents, iCloudConnected, iCloudEvents],
   );
 
   const toggleGoogleCalendar = (calendarId: string) => {
     const next = { ...visibleGoogleCalendars, [calendarId]: !visibleGoogleCalendars[calendarId] };
     setVisibleGoogleCalendars(next);
     localStorage.setItem("oncal-google-calendars", JSON.stringify(next));
+  };
+
+  const toggleICloudCalendar = (calendarId: string) => {
+    const next = { ...visibleICloudCalendars, [calendarId]: !visibleICloudCalendars[calendarId] };
+    setVisibleICloudCalendars(next);
+    localStorage.setItem("oncal-icloud-calendars", JSON.stringify(next));
   };
 
   const submitQuick = () => {
@@ -169,8 +218,23 @@ export default function Home() {
                   />
                   <span className={`checkmark ${source}`}>✓</span>
                   <span>{sourceLabel[source]}</span>
-                  <em>{source === "icloud" ? "개인" : source === "google" ? (googleConnected ? "연결됨" : googleReady ? "미연결" : "설정 필요") : "업무"}</em>
+                  <em>{source === "icloud" ? (iCloudConnected ? "연결됨" : iCloudReady ? "미연결" : "설정 필요") : source === "google" ? (googleConnected ? "연결됨" : googleReady ? "미연결" : "설정 필요") : "업무"}</em>
                 </label>
+                {source === "icloud" && iCloudConnected && visible.icloud && (
+                  <div className="google-calendar-children" aria-label="연결된 iCloud 캘린더">
+                    {iCloudCalendars.map((calendar) => (
+                      <label className="calendar-row calendar-child" key={calendar.id}>
+                        <input
+                          type="checkbox"
+                          checked={visibleICloudCalendars[calendar.id] ?? true}
+                          onChange={() => toggleICloudCalendar(calendar.id)}
+                        />
+                        <span className="checkmark google-child" style={{ backgroundColor: calendar.color }}>✓</span>
+                        <span className="calendar-child-name">{calendar.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
                 {source === "google" && googleConnected && visible.google && (
                   <div className="google-calendar-children" aria-label="연결된 Google 캘린더">
                     {googleCalendars.map((calendar) => (
@@ -189,6 +253,22 @@ export default function Home() {
                 )}
               </Fragment>
             ))}
+            {iCloudConnected ? (
+              <form action="/api/icloud/disconnect" method="post"><button className="connect-calendar" type="submit">iCloud 연결 해제</button></form>
+            ) : (
+              <form action="/api/icloud/connect" method="post">
+                <button
+                  className="connect-calendar"
+                  type="submit"
+                  disabled={!iCloudReady}
+                  onClick={(event) => {
+                    if (iCloudReady) return;
+                    event.preventDefault();
+                    setNotice("iCloud 연결 정보가 아직 설정되지 않았어요.");
+                  }}
+                >+ &nbsp;iCloud 캘린더 연결</button>
+              </form>
+            )}
             {googleConnected ? (
               <form action="/api/google/disconnect" method="post"><button className="connect-calendar" type="submit">Google 연결 해제</button></form>
             ) : (
@@ -256,7 +336,7 @@ function DayCell({ day, events, muted, today }: { day: number; events: EventItem
             className={`event ${event.source}`}
             key={event.id || `${event.title}-${event.time}`}
             title={`${sourceLabel[event.source]} · ${event.title}`}
-            style={event.source === "google" && event.color ? { borderLeftColor: event.color, backgroundColor: `${event.color}20` } : undefined}
+            style={(event.source === "google" || event.source === "icloud") && event.color ? { borderLeftColor: event.color, backgroundColor: `${event.color}20` } : undefined}
           >
             <span>{event.time}</span>{event.title}
           </button>
