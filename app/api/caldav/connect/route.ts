@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       CALDAV_PRINCIPAL_NOT_FOUND: "서버 로그인은 됐지만 사용자 캘린더 경로를 확인하지 못했습니다.",
       CALDAV_HOME_NOT_FOUND: "사용자 인증은 됐지만 캘린더 보관함 경로를 확인하지 못했습니다.",
     };
-    const message = code.includes("주소") ? code : messages[code] || "서버에는 접속했지만 CalDAV 응답을 해석하지 못했습니다.";
+    const message = code.includes("주소") ? code : messages[code] || `서버에는 접속했지만 CalDAV 응답을 해석하지 못했습니다. (진단: ${code})`;
     return NextResponse.json({ error: message, code }, { status: 400 });
   }
 }
