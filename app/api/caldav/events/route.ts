@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { companyCalDavCookie, discoverCompanyCalendars, openCompanyCredentials } from "@/app/lib/company-caldav";
-import { fetchICloudEvents } from "@/app/lib/icloud-caldav";
+import { createCalDavEvent, deleteCalDavEvent, fetchICloudEvents, updateCalDavEvent } from "@/app/lib/icloud-caldav";
 
-export async function GET(request: NextRequest) {
-  const sealed = request.cookies.get(companyCalDavCookie.name)?.value;
-  if (!sealed) return NextResponse.json({ connected: false, calendars: [], events: [] });
-  try {
-    const credentials = await openCompanyCredentials(sealed);
-    const calendars = await discoverCompanyCalendars(credentials);
-    const now = new Date();
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1));
-    const groups = await Promise.all(calendars.map((calendar) => fetchICloudEvents(credentials, calendar, start, end).catch(() => [])));
-    return NextResponse.json({ connected: true, calendars: calendars.map(({ id, name, color }) => ({ id, name, color })), events: groups.flat() });
-  } catch {
-    const response = NextResponse.json({ connected: false, calendars: [], events: [], error: "reconnect_required" }, { status: 401 });
-    response.cookies.delete(companyCalDavCookie.name);
-    return response;
-  }
-}
+async function context(request: NextRequest) { const sealed = request.cookies.get(companyCalDavCookie.name)?.value; if (!sealed) throw new Error("NOT_CONNECTED"); const credentials = await openCompanyCredentials(sealed); return { credentials, calendars: await discoverCompanyCalendars(credentials) }; }
+export async function GET(request: NextRequest) { try { const { credentials, calendars } = await context(request); const start = new Date(request.nextUrl.searchParams.get("from") || Date.now() - 31 * 86400000); const end = new Date(request.nextUrl.searchParams.get("to") || Date.now() + 93 * 86400000); const groups = await Promise.all(calendars.map(c => fetchICloudEvents(credentials, c, start, end).catch(() => []))); return NextResponse.json({ connected: true, calendars: calendars.map(({ id, name, color }) => ({ id, name, color })), events: groups.flat() }); } catch { return NextResponse.json({ connected: false, calendars: [], events: [], error: "reconnect_required" }, { status: 401 }); } }
+export async function POST(request: NextRequest) { try { const body = await request.json(); const { credentials, calendars } = await context(request); const calendar = calendars.find(c => c.id === body.calendarId); if (!calendar) throw new Error("CALENDAR_NOT_FOUND"); await createCalDavEvent(credentials, calendar, body); return NextResponse.json({ saved: true }); } catch { return NextResponse.json({ error: "save_failed" }, { status: 400 }); } }
+export async function PATCH(request: NextRequest) { try { const body = await request.json(); const { credentials } = await context(request); await updateCalDavEvent(credentials, body.resourceUrl, { ...body, uid: body.providerEventId }); return NextResponse.json({ saved: true }); } catch { return NextResponse.json({ error: "save_failed" }, { status: 400 }); } }
+export async function DELETE(request: NextRequest) { try { const body = await request.json(); const { credentials } = await context(request); await deleteCalDavEvent(credentials, body.resourceUrl); return NextResponse.json({ deleted: true }); } catch { return NextResponse.json({ error: "delete_failed" }, { status: 400 }); } }

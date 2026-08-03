@@ -1,484 +1,120 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import KoreanLunarCalendar from "korean-lunar-calendar";
 
 type Source = "icloud" | "google" | "daou";
-type EventItem = {
-  id?: string;
-  day: number;
-  title: string;
-  time: string;
-  source: Source;
-  calendarId?: string;
-  color?: string;
-  span?: number;
-};
+type View = "day" | "week" | "month";
+type CalendarItem = { id: string; name: string; color: string; primary?: boolean; selected?: boolean; source: Source };
+type EventItem = { id: string; providerEventId?: string; resourceUrl?: string; calendarId: string; calendarName?: string; calendarColor?: string; title: string; start: string; end: string; allDay: boolean; recurrence?: string; source: Source };
+type EventForm = { title: string; date: string; startTime: string; endTime: string; allDay: boolean; recurrence: string; calendarKey: string };
 
-type GoogleCalendarItem = {
-  id: string;
-  name: string;
-  color: string;
-  primary: boolean;
-  selected: boolean;
-};
+const sourceLabel: Record<Source, string> = { icloud: "iCloud", google: "Google", daou: "회사 일정" };
+const sourcePath: Record<Source, string> = { icloud: "/api/icloud/events", google: "/api/google/events", daou: "/api/caldav/events" };
+const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
+const pad = (n: number) => String(n).padStart(2, "0");
+const dateKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDays = (d: Date, days: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + days);
+const parseEventDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
 
-const events: EventItem[] = [
-  { day: 3, title: "8월 월간 회의", time: "10:00", source: "daou" },
-  { day: 4, title: "민준이 태권도 상담", time: "19:00", source: "icloud" },
-  { day: 5, title: "프로젝트 킥오프", time: "14:00", source: "google" },
-  { day: 7, title: "부서 주간 보고", time: "09:30", source: "daou" },
-  { day: 10, title: "여름휴가", time: "종일", source: "icloud", span: 3 },
-  { day: 14, title: "건강검진", time: "08:30", source: "icloud" },
-  { day: 18, title: "고객사 미팅", time: "15:00", source: "daou" },
-  { day: 21, title: "학부모 상담", time: "16:30", source: "google" },
-  { day: 24, title: "팀 저녁식사", time: "18:30", source: "daou" },
-  { day: 28, title: "치과 예약", time: "11:00", source: "icloud" },
-];
-
-const sourceLabel: Record<Source, string> = {
-  icloud: "iCloud",
-  google: "Google",
-  daou: "회사 일정",
-};
-
-const days = ["일", "월", "화", "수", "목", "금", "토"];
-const calendarYear = 2026;
-const calendarMonth = 7;
-const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
-const leadingCount = new Date(calendarYear, calendarMonth, 1).getDay();
-const previousMonthDays = new Date(calendarYear, calendarMonth, 0).getDate();
-const leadingDays = Array.from({ length: leadingCount }, (_, index) => previousMonthDays - leadingCount + index + 1);
-const trailingDays = Array.from({ length: 42 - leadingCount - daysInMonth }, (_, index) => index + 1);
-const monthCells = [
-  ...leadingDays.map((day) => ({ day, muted: true })),
-  ...Array.from({ length: daysInMonth }, (_, index) => ({ day: index + 1, muted: false })),
-  ...trailingDays.map((day) => ({ day, muted: true })),
-];
-
-function getLunarLabel(day: number) {
-  const lunar = new KoreanLunarCalendar();
-  if (!lunar.setSolarDate(calendarYear, calendarMonth + 1, day)) return "";
-  const date = lunar.getLunarCalendar();
-  return `음 ${date.intercalation ? "윤" : ""}${date.month}.${date.day}`;
-}
+function lunarLabel(d: Date) { const lunar = new KoreanLunarCalendar(); if (!lunar.setSolarDate(d.getFullYear(), d.getMonth() + 1, d.getDate())) return ""; const v = lunar.getLunarCalendar(); return `음 ${v.intercalation ? "윤" : ""}${v.month}.${v.day}`; }
+function rangeFor(cursor: Date, view: View) { if (view === "month") { const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const start = addDays(first, -first.getDay()); return { start, end: addDays(start, 42) }; } if (view === "week") { const start = addDays(startOfDay(cursor), -cursor.getDay()); return { start, end: addDays(start, 7) }; } return { start: startOfDay(cursor), end: addDays(startOfDay(cursor), 1) }; }
+function defaultForm(date: Date, calendarKey = "") : EventForm { return { title: "", date: dateKey(date), startTime: "09:00", endTime: "10:00", allDay: false, recurrence: "", calendarKey }; }
 
 export default function Home() {
-  const [visible, setVisible] = useState<Record<Source, boolean>>({
-    icloud: true,
-    google: true,
-    daou: true,
-  });
-  const [quickInput, setQuickInput] = useState("");
+  const [cursor, setCursor] = useState(() => startOfDay(new Date()));
+  const [view, setView] = useState<View>("month");
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [calendars, setCalendars] = useState<CalendarItem[]>([]);
+  const [connected, setConnected] = useState<Record<Source, boolean>>({ icloud: false, google: false, daou: false });
+  const [configured, setConfigured] = useState<Record<Source, boolean>>({ icloud: false, google: false, daou: true });
+  const [sourceVisible, setSourceVisible] = useState<Record<Source, boolean>>({ icloud: true, google: true, daou: true });
+  const [calendarVisible, setCalendarVisible] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [googleConnected, setGoogleConnected] = useState(false);
-  const [googleReady, setGoogleReady] = useState(false);
-  const [googleEvents, setGoogleEvents] = useState<EventItem[]>([]);
-  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarItem[]>([]);
-  const [visibleGoogleCalendars, setVisibleGoogleCalendars] = useState<Record<string, boolean>>({});
-  const [iCloudConnected, setICloudConnected] = useState(false);
-  const [iCloudReady, setICloudReady] = useState(false);
-  const [iCloudEvents, setICloudEvents] = useState<EventItem[]>([]);
-  const [iCloudCalendars, setICloudCalendars] = useState<GoogleCalendarItem[]>([]);
-  const [visibleICloudCalendars, setVisibleICloudCalendars] = useState<Record<string, boolean>>({});
-  const [companyConnected, setCompanyConnected] = useState(false);
-  const [companyEvents, setCompanyEvents] = useState<EventItem[]>([]);
-  const [companyCalendars, setCompanyCalendars] = useState<GoogleCalendarItem[]>([]);
-  const [visibleCompanyCalendars, setVisibleCompanyCalendars] = useState<Record<string, boolean>>({});
+  const [quickInput, setQuickInput] = useState("");
+  const [showLunar, setShowLunar] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editing, setEditing] = useState<EventItem | null>(null);
+  const [form, setForm] = useState<EventForm>(() => defaultForm(new Date()));
+  const [saving, setSaving] = useState(false);
   const [calDavModal, setCalDavModal] = useState(false);
   const [calDavForm, setCalDavForm] = useState({ serverUrl: "", email: "", password: "" });
   const [calDavConnecting, setCalDavConnecting] = useState(false);
-  const [today, setToday] = useState<Date | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [showLunar, setShowLunar] = useState(false);
+  const visibleRange = useMemo(() => rangeFor(cursor, view), [cursor, view]);
 
-  useEffect(() => {
-    setToday(new Date());
-    setShowLunar(localStorage.getItem("oncal-show-lunar") === "true");
-    fetch("/api/google/events")
-      .then((response) => response.json())
-      .then((data: { connected?: boolean; configured?: boolean; calendars?: GoogleCalendarItem[]; events?: Array<{ id: string; calendarId: string; calendarColor?: string; title: string; start?: string; allDay?: boolean }> }) => {
-        setGoogleConnected(Boolean(data.connected));
-        setGoogleReady(Boolean(data.configured));
-        const calendars = data.calendars ?? [];
-        setGoogleCalendars(calendars);
-        let saved: Record<string, boolean> = {};
-        try { saved = JSON.parse(localStorage.getItem("oncal-google-calendars") || "{}"); } catch { saved = {}; }
-        setVisibleGoogleCalendars(Object.fromEntries(calendars.map((calendar) => [
-          calendar.id,
-          saved[calendar.id] ?? calendar.selected,
-        ])));
-        const liveEvents = (data.events ?? []).flatMap((event) => {
-          if (!event.start) return [];
-          const start = new Date(event.start);
-          if (Number.isNaN(start.getTime()) || start.getFullYear() !== 2026 || start.getMonth() !== 7) return [];
-          return [{
-            id: event.id,
-            day: start.getDate(),
-            title: event.title,
-            time: event.allDay ? "종일" : start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
-            source: "google" as const,
-            calendarId: event.calendarId,
-            color: event.calendarColor,
-          }];
-        });
-        setGoogleEvents(liveEvents);
-      })
-      .catch(() => setGoogleConnected(false));
+  const loadEvents = useCallback(async () => {
+    setLoading(true);
+    const query = `?from=${encodeURIComponent(visibleRange.start.toISOString())}&to=${encodeURIComponent(visibleRange.end.toISOString())}`;
+    const sources: Source[] = ["icloud", "google", "daou"];
+    const results = await Promise.all(sources.map(async source => { try { const response = await fetch(sourcePath[source] + query); const data = await response.json(); return { source, data }; } catch { return { source, data: { connected: false, events: [], calendars: [] } }; } }));
+    const nextEvents: EventItem[] = []; const nextCalendars: CalendarItem[] = []; const nextConnected = { ...connected }; const nextConfigured = { ...configured };
+    let savedVisibility: Record<string, boolean> = {}; try { savedVisibility = JSON.parse(localStorage.getItem("oncal-calendar-visibility") || "{}"); } catch { savedVisibility = {}; }
+    const visibility: Record<string, boolean> = {};
+    for (const { source, data } of results) { nextConnected[source] = Boolean(data.connected); if (typeof data.configured === "boolean") nextConfigured[source] = data.configured; for (const c of data.calendars ?? []) { nextCalendars.push({ ...c, source }); visibility[`${source}:${c.id}`] = savedVisibility[`${source}:${c.id}`] ?? c.selected !== false; } for (const e of data.events ?? []) if (e.start) nextEvents.push({ ...e, source }); }
+    setConnected(nextConnected); setConfigured(nextConfigured); setCalendars(nextCalendars); setCalendarVisible(visibility); setEvents(nextEvents); setLoading(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleRange.start.getTime(), visibleRange.end.getTime()]);
 
-    fetch("/api/icloud/events")
-      .then((response) => response.json())
-      .then((data: { connected?: boolean; configured?: boolean; calendars?: Array<{ id: string; name: string; color: string }>; events?: Array<{ id: string; calendarId: string; calendarColor?: string; title: string; start?: string; allDay?: boolean }> }) => {
-        setICloudConnected(Boolean(data.connected));
-        setICloudReady(Boolean(data.configured));
-        const calendars = (data.calendars ?? []).map((calendar) => ({ ...calendar, primary: false, selected: true }));
-        setICloudCalendars(calendars);
-        let saved: Record<string, boolean> = {};
-        try { saved = JSON.parse(localStorage.getItem("oncal-icloud-calendars") || "{}"); } catch { saved = {}; }
-        setVisibleICloudCalendars(Object.fromEntries(calendars.map((calendar) => [calendar.id, saved[calendar.id] ?? true])));
-        setICloudEvents((data.events ?? []).flatMap((event) => {
-          if (!event.start) return [];
-          const start = new Date(event.start);
-          if (Number.isNaN(start.getTime()) || start.getFullYear() !== 2026 || start.getMonth() !== 7) return [];
-          return [{
-            id: event.id,
-            day: start.getDate(),
-            title: event.title,
-            time: event.allDay ? "종일" : start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
-            source: "icloud" as const,
-            calendarId: event.calendarId,
-            color: event.calendarColor,
-          }];
-        }));
-      })
-      .catch(() => setICloudConnected(false));
+  useEffect(() => { setShowLunar(localStorage.getItem("oncal-show-lunar") === "true"); const params = new URLSearchParams(location.search); const result = params.get("google") || params.get("icloud") || params.get("caldav"); if (result === "connected") setNotice("캘린더가 연결됐어요."); if (result === "failed") setNotice("연결에 실패했어요. 로그인 정보를 확인해 주세요."); if (result === "setup-required") setNotice("연동 설정이 아직 완료되지 않았어요."); if (result) history.replaceState({}, "", location.pathname); }, []);
+  useEffect(() => { loadEvents(); }, [loadEvents]);
 
-    fetch("/api/caldav/events")
-      .then((response) => response.json())
-      .then((data: { connected?: boolean; calendars?: Array<{ id: string; name: string; color: string }>; events?: Array<{ id: string; calendarId: string; calendarColor?: string; title: string; start?: string; allDay?: boolean }> }) => {
-        setCompanyConnected(Boolean(data.connected));
-        const calendars = (data.calendars ?? []).map((calendar) => ({ ...calendar, primary: false, selected: true }));
-        setCompanyCalendars(calendars);
-        let saved: Record<string, boolean> = {};
-        try { saved = JSON.parse(localStorage.getItem("oncal-company-calendars") || "{}"); } catch { saved = {}; }
-        setVisibleCompanyCalendars(Object.fromEntries(calendars.map((calendar) => [calendar.id, saved[calendar.id] ?? true])));
-        setCompanyEvents((data.events ?? []).flatMap((event) => {
-          if (!event.start) return [];
-          const start = new Date(event.start);
-          if (Number.isNaN(start.getTime()) || start.getFullYear() !== 2026 || start.getMonth() !== 7) return [];
-          return [{
-            id: event.id, day: start.getDate(), title: event.title,
-            time: event.allDay ? "종일" : start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
-            source: "daou" as const, calendarId: event.calendarId, color: event.calendarColor,
-          }];
-        }));
-      })
-      .catch(() => setCompanyConnected(false));
+  const filtered = useMemo(() => events.filter(e => sourceVisible[e.source] && calendarVisible[`${e.source}:${e.calendarId}`] !== false), [events, sourceVisible, calendarVisible]);
+  const title = view === "day" ? cursor.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }) : view === "week" ? `${visibleRange.start.getFullYear()}년 ${visibleRange.start.getMonth() + 1}월 ${visibleRange.start.getDate()}일 주` : `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
+  const step = (direction: number) => setCursor(d => view === "month" ? new Date(d.getFullYear(), d.getMonth() + direction, 1) : addDays(d, direction * (view === "week" ? 7 : 1)));
+  const firstCalendarKey = calendars[0] ? `${calendars[0].source}:${calendars[0].id}` : "";
 
-    const googleResult = new URLSearchParams(window.location.search).get("google");
-    if (googleResult === "setup-required") setNotice("Google 연동 설정이 아직 완료되지 않았어요. OAuth 인증정보를 연결해야 합니다.");
-    if (googleResult === "failed") setNotice("Google 연결에 실패했어요. 잠시 후 다시 시도해 주세요.");
-    if (googleResult === "connected") setNotice("Google 캘린더가 연결됐어요.");
-    if (googleResult) window.history.replaceState({}, "", window.location.pathname);
-    const iCloudResult = new URLSearchParams(window.location.search).get("icloud");
-    if (iCloudResult === "setup-required") setNotice("iCloud 연결 정보가 아직 설정되지 않았어요.");
-    if (iCloudResult === "failed") setNotice("iCloud 연결에 실패했어요. Apple 계정과 앱 전용 암호를 확인해 주세요.");
-    if (iCloudResult === "connected") setNotice("iCloud 캘린더가 연결됐어요.");
-    if (iCloudResult === "disconnected") setNotice("iCloud 연결을 해제했어요.");
-    if (iCloudResult) window.history.replaceState({}, "", window.location.pathname);
-    if (new URLSearchParams(window.location.search).get("caldav") === "disconnected") {
-      setNotice("회사 일정 연결을 해제했어요.");
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
+  const openCreate = (date = cursor, title = "") => { setEditing(null); setForm({ ...defaultForm(date, firstCalendarKey), title }); setEditorOpen(true); };
+  const openEdit = (event: EventItem) => { const start = parseEventDate(event.start); const end = parseEventDate(event.end || event.start); setEditing(event); setForm({ title: event.title, date: dateKey(start), startTime: `${pad(start.getHours())}:${pad(start.getMinutes())}`, endTime: `${pad(end.getHours())}:${pad(end.getMinutes())}`, allDay: event.allDay, recurrence: event.recurrence || "", calendarKey: `${event.source}:${event.calendarId}` }); setEditorOpen(true); };
 
-  const todayLabel = today
-    ? today.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })
-    : "오늘";
-  const todayDay = today && today.getFullYear() === calendarYear && today.getMonth() === calendarMonth ? today.getDate() : null;
+  const payload = () => { const [source, ...calendarParts] = form.calendarKey.split(":"); const calendarId = calendarParts.join(":"); const start = form.allDay ? form.date : new Date(`${form.date}T${form.startTime}`).toISOString(); const endDate = form.allDay ? dateKey(addDays(new Date(`${form.date}T00:00:00`), 1)) : new Date(`${form.date}T${form.endTime}`).toISOString(); return { source: source as Source, calendarId, title: form.title.trim(), start, end: endDate, allDay: form.allDay, recurrence: form.recurrence, providerEventId: editing?.providerEventId, resourceUrl: editing?.resourceUrl }; };
+  const saveEvent = async () => { if (!form.title.trim() || !form.calendarKey) { setNotice("제목과 저장할 캘린더를 선택해 주세요."); return; } setSaving(true); const body = payload(); try { const response = await fetch(sourcePath[body.source], { method: editing ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) { if (data.error === "google_reconnect_required") throw new Error("Google 쓰기 권한이 필요합니다. Google 연결을 해제한 뒤 다시 연결해 주세요."); throw new Error("일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요."); } setEditorOpen(false); setNotice(editing ? "일정을 수정했어요." : "새 일정을 저장했어요."); await loadEvents(); } catch (e) { setNotice(e instanceof Error ? e.message : "저장에 실패했어요."); } finally { setSaving(false); } };
+  const deleteEvent = async () => { if (!editing || !confirm("이 일정을 삭제할까요?")) return; setSaving(true); try { const response = await fetch(sourcePath[editing.source], { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify(editing) }); if (!response.ok) throw new Error(); setEditorOpen(false); setNotice("일정을 삭제했어요."); await loadEvents(); } catch { setNotice("일정을 삭제하지 못했어요."); } finally { setSaving(false); } };
 
-  const filteredEvents = useMemo(
-    () => [
-      ...(companyConnected ? companyEvents : events.filter((event) => event.source === "daou")),
-      ...(googleConnected ? googleEvents : events.filter((event) => event.source === "google")),
-      ...(iCloudConnected ? iCloudEvents : events.filter((event) => event.source === "icloud")),
-    ]
-      .filter((event) => visible[event.source])
-      .filter((event) => event.source !== "google" || !googleConnected || !event.calendarId || visibleGoogleCalendars[event.calendarId])
-      .filter((event) => event.source !== "icloud" || !iCloudConnected || !event.calendarId || visibleICloudCalendars[event.calendarId])
-      .filter((event) => event.source !== "daou" || !companyConnected || !event.calendarId || visibleCompanyCalendars[event.calendarId]),
-    [visible, visibleGoogleCalendars, visibleICloudCalendars, visibleCompanyCalendars, googleConnected, googleEvents, iCloudConnected, iCloudEvents, companyConnected, companyEvents],
-  );
+  const toggleCalendar = (key: string) => { const next = { ...calendarVisible, [key]: calendarVisible[key] === false }; setCalendarVisible(next); localStorage.setItem("oncal-calendar-visibility", JSON.stringify(next)); };
+  const toggleLunar = () => { const next = !showLunar; setShowLunar(next); localStorage.setItem("oncal-show-lunar", String(next)); };
+  const connectCalDav = async () => { setCalDavConnecting(true); try { const response = await fetch("/api/caldav/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(calDavForm) }); const data = await response.json(); if (!response.ok || !data.connected) throw new Error(data.error || "연결에 실패했습니다."); location.reload(); } catch (e) { setNotice(e instanceof Error ? e.message : "연결에 실패했습니다."); setCalDavConnecting(false); } };
+  const quickAdd = () => { if (!quickInput.trim()) return; openCreate(cursor, quickInput.trim()); setQuickInput(""); };
 
-  const toggleGoogleCalendar = (calendarId: string) => {
-    const next = { ...visibleGoogleCalendars, [calendarId]: !visibleGoogleCalendars[calendarId] };
-    setVisibleGoogleCalendars(next);
-    localStorage.setItem("oncal-google-calendars", JSON.stringify(next));
-  };
-
-  const toggleICloudCalendar = (calendarId: string) => {
-    const next = { ...visibleICloudCalendars, [calendarId]: !visibleICloudCalendars[calendarId] };
-    setVisibleICloudCalendars(next);
-    localStorage.setItem("oncal-icloud-calendars", JSON.stringify(next));
-  };
-
-  const toggleCompanyCalendar = (calendarId: string) => {
-    const next = { ...visibleCompanyCalendars, [calendarId]: !visibleCompanyCalendars[calendarId] };
-    setVisibleCompanyCalendars(next);
-    localStorage.setItem("oncal-company-calendars", JSON.stringify(next));
-  };
-
-  const connectCalDav = async () => {
-    setCalDavConnecting(true);
-    try {
-      const response = await fetch("/api/caldav/connect", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(calDavForm),
-      });
-      const data = await response.json() as { connected?: boolean; error?: string };
-      if (!response.ok || !data.connected) throw new Error(data.error || "연결에 실패했습니다.");
-      window.location.reload();
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "연결에 실패했습니다.");
-      setCalDavConnecting(false);
-    }
-  };
-
-  const toggleLunar = () => {
-    const next = !showLunar;
-    setShowLunar(next);
-    localStorage.setItem("oncal-show-lunar", String(next));
-  };
-
-  const submitQuick = () => {
-    if (!quickInput.trim()) return;
-    setNotice(`“${quickInput}” 일정을 파악했어요. 저장 위치만 선택하면 됩니다.`);
-    setQuickInput("");
-    window.setTimeout(() => setNotice(""), 4500);
-  };
-
-  return (
-    <main className="app-shell">
-      <header className="topbar">
-        <button className="mobile-menu" onClick={() => setMobileMenu(!mobileMenu)} aria-label="메뉴 열기">
-          <span /> <span />
-        </button>
-        <a className="brand" href="#" aria-label="온캘 홈">
-          <span className="brand-mark"><i /><i /><i /></span>
-          <span>OnCal</span>
-        </a>
-        <div className="date-nav">
-          <button aria-label="이전 달">‹</button>
-          <button className="today-button">오늘</button>
-          <button aria-label="다음 달">›</button>
-          <div className="date-title"><h1>{calendarYear}년 {calendarMonth + 1}월</h1><span>오늘 · {todayLabel}</span></div>
-        </div>
-        <div className="header-actions">
-          <button className="search-button" aria-label="일정 검색">⌕</button>
-          <div className="view-switch" aria-label="캘린더 보기 선택">
-            <button>일</button><button>주</button><button className="active">월</button>
-          </div>
-          <button className="avatar" aria-label="내 계정">KS</button>
-        </div>
-      </header>
-
-      <div className="workspace">
-        <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
-          <button className="new-event"><span>+</span> 새 일정</button>
-
-          <section className="mini-calendar">
-            <div className="mini-title"><b>{calendarYear}년 {calendarMonth + 1}월</b><span>‹&nbsp;&nbsp; ›</span></div>
-            <div className="mini-grid mini-week">{days.map((d) => <span key={d}>{d}</span>)}</div>
-            <div className="mini-grid">
-              {monthCells.map((cell, index) => (
-                <span key={`${cell.day}-${index}`} className={`${cell.muted ? "muted" : ""} ${!cell.muted && cell.day === todayDay ? "selected" : ""}`}>{cell.day}</span>
-              ))}
-            </div>
-          </section>
-
-          <section className="calendar-list">
-            <div className="section-heading">
-              <b>내 캘린더</b>
-              <button aria-label="캘린더 설정" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>···</button>
-              {settingsOpen && (
-                <div className="calendar-settings">
-                  <div><span className="settings-icon">달</span><span><b>대한민국 음력</b><small>날짜 칸에 음력 월·일 표시</small></span></div>
-                  <button className={`toggle-switch ${showLunar ? "on" : ""}`} type="button" role="switch" aria-checked={showLunar} onClick={toggleLunar}><i /></button>
-                </div>
-              )}
-            </div>
-            {(["icloud", "google", "daou"] as Source[]).map((source) => (
-              <Fragment key={source}>
-                <label className="calendar-row">
-                  <input
-                    type="checkbox"
-                    checked={visible[source]}
-                    onChange={() => setVisible({ ...visible, [source]: !visible[source] })}
-                  />
-                  <span className={`checkmark ${source}`}>✓</span>
-                  <span>{sourceLabel[source]}</span>
-                  <em>{source === "icloud" ? (iCloudConnected ? "연결됨" : iCloudReady ? "미연결" : "설정 필요") : source === "google" ? (googleConnected ? "연결됨" : googleReady ? "미연결" : "설정 필요") : companyConnected ? "연결됨" : "미연결"}</em>
-                </label>
-                {source === "icloud" && iCloudConnected && visible.icloud && (
-                  <div className="google-calendar-children" aria-label="연결된 iCloud 캘린더">
-                    {iCloudCalendars.map((calendar) => (
-                      <label className="calendar-row calendar-child" key={calendar.id}>
-                        <input
-                          type="checkbox"
-                          checked={visibleICloudCalendars[calendar.id] ?? true}
-                          onChange={() => toggleICloudCalendar(calendar.id)}
-                        />
-                        <span className="checkmark google-child" style={{ backgroundColor: calendar.color }}>✓</span>
-                        <span className="calendar-child-name">{calendar.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {source === "google" && googleConnected && visible.google && (
-                  <div className="google-calendar-children" aria-label="연결된 Google 캘린더">
-                    {googleCalendars.map((calendar) => (
-                      <label className="calendar-row calendar-child" key={calendar.id}>
-                        <input
-                          type="checkbox"
-                          checked={visibleGoogleCalendars[calendar.id] ?? true}
-                          onChange={() => toggleGoogleCalendar(calendar.id)}
-                        />
-                        <span className="checkmark google-child" style={{ backgroundColor: calendar.color }}>✓</span>
-                        <span className="calendar-child-name">{calendar.name}</span>
-                        {calendar.primary && <em>기본</em>}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {source === "daou" && companyConnected && visible.daou && (
-                  <div className="google-calendar-children" aria-label="연결된 회사 캘린더">
-                    {companyCalendars.map((calendar) => (
-                      <label className="calendar-row calendar-child" key={calendar.id}>
-                        <input
-                          type="checkbox"
-                          checked={visibleCompanyCalendars[calendar.id] ?? true}
-                          onChange={() => toggleCompanyCalendar(calendar.id)}
-                        />
-                        <span className="checkmark google-child" style={{ backgroundColor: calendar.color }}>✓</span>
-                        <span className="calendar-child-name">{calendar.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </Fragment>
-            ))}
-            {iCloudConnected ? (
-              <form action="/api/icloud/disconnect" method="post"><button className="connect-calendar" type="submit">iCloud 연결 해제</button></form>
-            ) : (
-              <form action="/api/icloud/connect" method="post">
-                <button
-                  className="connect-calendar"
-                  type="submit"
-                  disabled={!iCloudReady}
-                  onClick={(event) => {
-                    if (iCloudReady) return;
-                    event.preventDefault();
-                    setNotice("iCloud 연결 정보가 아직 설정되지 않았어요.");
-                  }}
-                >+ &nbsp;iCloud 캘린더 연결</button>
-              </form>
-            )}
-            {googleConnected ? (
-              <form action="/api/google/disconnect" method="post"><button className="connect-calendar" type="submit">Google 연결 해제</button></form>
-            ) : (
-              <a
-                className="connect-calendar"
-                href={googleReady ? "/api/google/connect" : "#"}
-                onClick={(event) => {
-                  if (googleReady) return;
-                  event.preventDefault();
-                  setNotice("Google OAuth 인증정보가 아직 설정되지 않았어요. 인증정보를 추가한 후 연결할 수 있어요.");
-                }}
-              >+ &nbsp;Google 캘린더 연결</a>
-            )}
-            {companyConnected ? (
-              <form action="/api/caldav/disconnect" method="post"><button className="connect-calendar" type="submit">회사 일정 연결 해제</button></form>
-            ) : (
-              <button className="connect-calendar" type="button" onClick={() => setCalDavModal(true)}>+ &nbsp;회사 일정 연결</button>
-            )}
-          </section>
-
-          <div className="sync-card">
-            <span className="sync-icon">⇅</span>
-            <div><b>모두 동기화됨</b><small>방금 전 업데이트</small></div>
-            <span className="status-dot" />
-          </div>
-          <p className="privacy-note">현재 캘린더 상태는 로컬 데모입니다.</p>
-        </aside>
-
-        <section className="calendar-area">
-          <div className="quick-add">
-            <span className="spark">✦</span>
-            <input
-              value={quickInput}
-              onChange={(e) => setQuickInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submitQuick()}
-              placeholder="예: 내일 오후 3시 치과 예약"
-              aria-label="빠른 일정 입력"
-            />
-            <span className="shortcut">Enter</span>
-            <button onClick={submitQuick}>일정 추가</button>
-          </div>
-
-          <div className="calendar-card">
-            <div className="week-header">
-              {days.map((day, i) => <div key={day} className={i === 0 || i === 6 ? "weekend" : ""}>{day}</div>)}
-            </div>
-            <div className="month-grid">
-              {leadingDays.map((day) => <DayCell key={`prev-${day}`} day={day} muted events={[]} />)}
-              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => (
-                <DayCell key={day} day={day} today={day === todayDay} lunar={showLunar ? getLunarLabel(day) : ""} events={filteredEvents.filter((e) => e.day === day)} />
-              ))}
-              {trailingDays.map((day) => <DayCell key={`next-${day}`} day={day} muted events={[]} />)}
-            </div>
-          </div>
+  return <main className="app-shell">
+    <header className="topbar">
+      <button className="mobile-menu" onClick={() => setMobileMenu(!mobileMenu)} aria-label="메뉴 열기"><span/><span/></button>
+      <a className="brand" href="#"><span className="brand-mark"><i/><i/><i/></span><span>OnCal</span></a>
+      <div className="date-nav"><button onClick={() => step(-1)} aria-label="이전">‹</button><button className="today-button" onClick={() => setCursor(startOfDay(new Date()))}>오늘</button><button onClick={() => step(1)} aria-label="다음">›</button><div className="date-title"><h1>{title}</h1><span>오늘 · {new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"long" })}</span></div></div>
+      <div className="header-actions"><div className="view-switch">{(["day","week","month"] as View[]).map(v => <button key={v} className={view === v ? "active" : ""} onClick={() => setView(v)}>{v === "day" ? "일" : v === "week" ? "주" : "월"}</button>)}</div><button className="avatar">KS</button></div>
+    </header>
+    <div className="workspace">
+      <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
+        <button className="new-event" onClick={() => openCreate()}><span>+</span> 새 일정</button>
+        <MiniCalendar cursor={cursor} onSelect={d => { setCursor(d); setView("day"); }} />
+        <section className="calendar-list"><div className="section-heading"><b>내 캘린더</b><button onClick={() => setSettingsOpen(!settingsOpen)}>···</button>{settingsOpen && <div className="calendar-settings"><div><span className="settings-icon">달</span><span><b>대한민국 음력</b><small>월 보기 날짜 칸에 표시</small></span></div><button className={`toggle-switch ${showLunar ? "on" : ""}`} onClick={toggleLunar}><i/></button></div>}</div>
+          {(["icloud","google","daou"] as Source[]).map(source => <Fragment key={source}><label className="calendar-row"><input type="checkbox" checked={sourceVisible[source]} onChange={() => setSourceVisible({ ...sourceVisible, [source]: !sourceVisible[source] })}/><span className={`checkmark ${source}`}>✓</span><span>{sourceLabel[source]}</span><em>{connected[source] ? "연결됨" : configured[source] ? "미연결" : "설정 필요"}</em></label>{connected[source] && sourceVisible[source] && <div className="google-calendar-children">{calendars.filter(c => c.source === source).map(c => { const key = `${source}:${c.id}`; return <label className="calendar-row calendar-child" key={key}><input type="checkbox" checked={calendarVisible[key] !== false} onChange={() => toggleCalendar(key)}/><span className="checkmark google-child" style={{backgroundColor:c.color}}>✓</span><span className="calendar-child-name">{c.name}</span>{c.primary && <em>기본</em>}</label>; })}</div>}</Fragment>)}
+          {connected.icloud ? <form action="/api/icloud/disconnect" method="post"><button className="connect-calendar">iCloud 연결 해제</button></form> : <form action="/api/icloud/connect" method="post"><button className="connect-calendar">+ &nbsp;iCloud 캘린더 연결</button></form>}
+          {connected.google ? <form action="/api/google/disconnect" method="post"><button className="connect-calendar">Google 연결 해제</button></form> : <a className="connect-calendar" href={configured.google ? "/api/google/connect" : "#"}>+ &nbsp;Google 캘린더 연결</a>}
+          {connected.daou ? <form action="/api/caldav/disconnect" method="post"><button className="connect-calendar">회사 일정 연결 해제</button></form> : <button className="connect-calendar" onClick={() => setCalDavModal(true)}>+ &nbsp;회사 일정 연결</button>}
         </section>
-      </div>
-
-      {calDavModal && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => !calDavConnecting && setCalDavModal(false)}>
-          <section className="connect-modal" role="dialog" aria-modal="true" aria-labelledby="caldav-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" type="button" aria-label="닫기" onClick={() => setCalDavModal(false)}>×</button>
-            <span className="modal-icon">↻</span>
-            <h2 id="caldav-title">회사 일정 연결</h2>
-            <p>회사에서 안내받은 CalDAV 정보를 입력하세요. 입력한 비밀번호는 암호화되어 저장됩니다.</p>
-            <label><span>회사 일정 서버</span><input type="text" placeholder="예: gw.company.co.kr" value={calDavForm.serverUrl} onChange={(event) => setCalDavForm({ ...calDavForm, serverUrl: event.target.value })} /></label>
-            <label><span>아이디 또는 이메일</span><input type="text" autoComplete="username" placeholder="name@company.com" value={calDavForm.email} onChange={(event) => setCalDavForm({ ...calDavForm, email: event.target.value })} /></label>
-            <label><span>비밀번호 또는 앱 암호</span><input type="password" autoComplete="current-password" placeholder="회사에서 발급받은 암호" value={calDavForm.password} onChange={(event) => setCalDavForm({ ...calDavForm, password: event.target.value })} onKeyDown={(event) => event.key === "Enter" && connectCalDav()} /></label>
-            <small>일반 계정 비밀번호 대신 앱 전용 암호를 지원한다면 앱 암호 사용을 권장합니다.</small>
-            <button className="modal-connect" type="button" disabled={calDavConnecting || !calDavForm.serverUrl || !calDavForm.email || !calDavForm.password} onClick={connectCalDav}>{calDavConnecting ? "연결 확인 중…" : "연결하기"}</button>
-          </section>
-        </div>
-      )}
-
-      {notice && <div className="toast"><span>✓</span>{notice}</div>}
-    </main>
-  );
-}
-
-function DayCell({ day, events, muted, today, lunar }: { day: number; events: EventItem[]; muted?: boolean; today?: boolean; lunar?: string }) {
-  return (
-    <div className={`day-cell ${muted ? "muted" : ""} ${today ? "today" : ""}`}>
-      <div className="day-label"><span className="day-number">{day}</span>{lunar && <span className="lunar-date">{lunar}</span>}</div>
-      <div className="events">
-        {events.map((event) => (
-          <button
-            className={`event ${event.source}`}
-            key={event.id || `${event.title}-${event.time}`}
-            title={`${sourceLabel[event.source]} · ${event.title}`}
-            style={event.color ? { borderLeftColor: event.color, backgroundColor: `${event.color}20` } : undefined}
-          >
-            <span>{event.time}</span>{event.title}
-          </button>
-        ))}
-      </div>
+        <div className="sync-card"><span className="sync-icon">⇅</span><div><b>{loading ? "동기화 중" : "모두 동기화됨"}</b><small>{loading ? "일정을 불러오고 있어요" : "최신 일정 표시 중"}</small></div><span className="status-dot"/></div><p className="privacy-note">연결된 캘린더에 직접 저장됩니다.</p>
+      </aside>
+      <section className="calendar-area"><div className="quick-add"><span className="spark">✦</span><input value={quickInput} onChange={e => setQuickInput(e.target.value)} onKeyDown={e => e.key === "Enter" && quickAdd()} placeholder="일정 제목을 입력하고 날짜·시간을 선택하세요"/><span className="shortcut">Enter</span><button onClick={quickAdd}>일정 추가</button></div>
+        <CalendarView view={view} cursor={cursor} range={visibleRange} events={filtered} loading={loading} showLunar={showLunar} onCreate={openCreate} onEdit={openEdit}/>
+      </section>
     </div>
-  );
+    {editorOpen && <EventEditor form={form} setForm={setForm} calendars={calendars} editing={editing} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveEvent} onDelete={deleteEvent}/>} 
+    {calDavModal && <div className="modal-backdrop" onMouseDown={() => !calDavConnecting && setCalDavModal(false)}><section className="connect-modal" onMouseDown={e => e.stopPropagation()}><button className="modal-close" onClick={() => setCalDavModal(false)}>×</button><span className="modal-icon">↻</span><h2>회사 일정 연결</h2><p>회사에서 안내받은 CalDAV 정보를 입력하세요.</p><label><span>회사 일정 서버</span><input placeholder="예: gw.company.co.kr" value={calDavForm.serverUrl} onChange={e => setCalDavForm({...calDavForm,serverUrl:e.target.value})}/></label><label><span>아이디 또는 이메일</span><input value={calDavForm.email} onChange={e => setCalDavForm({...calDavForm,email:e.target.value})}/></label><label><span>비밀번호 또는 앱 암호</span><input type="password" value={calDavForm.password} onChange={e => setCalDavForm({...calDavForm,password:e.target.value})}/></label><small>가능하면 앱 전용 암호를 사용하세요.</small><button className="modal-connect" disabled={calDavConnecting || !calDavForm.serverUrl || !calDavForm.email || !calDavForm.password} onClick={connectCalDav}>{calDavConnecting ? "연결 확인 중…" : "연결하기"}</button></section></div>}
+    {notice && <div className="toast"><span>✓</span>{notice}</div>}
+  </main>;
 }
+
+function MiniCalendar({ cursor, onSelect }: { cursor: Date; onSelect: (d: Date) => void }) { const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const start = addDays(first, -first.getDay()); const cells = Array.from({length:42},(_,i)=>addDays(start,i)); const today = dateKey(new Date()); return <section className="mini-calendar"><div className="mini-title"><b>{cursor.getFullYear()}년 {cursor.getMonth()+1}월</b></div><div className="mini-grid mini-week">{weekdays.map(d=><span key={d}>{d}</span>)}</div><div className="mini-grid">{cells.map(d=><button key={dateKey(d)} onClick={()=>onSelect(d)} className={`${d.getMonth()!==cursor.getMonth()?"muted":""} ${dateKey(d)===today?"selected":""}`}>{d.getDate()}</button>)}</div></section>; }
+
+function CalendarView({ view, cursor, range, events, loading, showLunar, onCreate, onEdit }: { view: View; cursor: Date; range:{start:Date;end:Date}; events:EventItem[]; loading:boolean; showLunar:boolean; onCreate:(d:Date)=>void; onEdit:(e:EventItem)=>void }) {
+  const today = dateKey(new Date()); if (view === "month") { const cells=Array.from({length:42},(_,i)=>addDays(range.start,i)); return <div className="calendar-card"><div className="week-header">{weekdays.map((d,i)=><div key={d} className={i===0||i===6?"weekend":""}>{d}</div>)}</div><div className="month-grid">{cells.map(d=><div key={dateKey(d)} className={`day-cell ${d.getMonth()!==cursor.getMonth()?"muted":""} ${dateKey(d)===today?"today":""}`} onClick={()=>onCreate(d)}><div className="day-label"><span className="day-number">{d.getDate()}</span>{showLunar&&<span className="lunar-date">{lunarLabel(d)}</span>}</div><EventList date={d} events={events} onEdit={onEdit}/></div>)}</div></div>; }
+  const dates = view === "week" ? Array.from({length:7},(_,i)=>addDays(range.start,i)) : [cursor]; return <div className={`calendar-card agenda-card ${view}`}><div className="agenda-columns">{dates.map(d=><section className={`agenda-day ${dateKey(d)===today?"today":""}`} key={dateKey(d)} onClick={()=>onCreate(d)}><header><b>{d.getDate()}</b><span>{weekdays[d.getDay()]}요일</span></header><EventList date={d} events={events} onEdit={onEdit} agenda/></section>)}</div>{loading&&<div className="calendar-loading">일정을 불러오는 중…</div>}</div>;
+}
+
+function EventList({ date, events, onEdit, agenda=false }: { date:Date; events:EventItem[]; onEdit:(e:EventItem)=>void; agenda?:boolean }) { const list=events.filter(e=>dateKey(parseEventDate(e.start))===dateKey(date)).sort((a,b)=>a.start.localeCompare(b.start)); return <div className={`events ${agenda?"agenda-events":""}`}>{list.map(e=>{const start=parseEventDate(e.start); return <button className={`event ${e.source}`} key={e.id} onClick={x=>{x.stopPropagation();onEdit(e);}} style={e.calendarColor?{borderLeftColor:e.calendarColor,backgroundColor:`${e.calendarColor}20`}:undefined}><span>{e.allDay?"종일":`${pad(start.getHours())}:${pad(start.getMinutes())}`}</span>{e.title}</button>;})}{agenda&&list.length===0&&<button className="empty-day" onClick={x=>x.stopPropagation()}>등록된 일정이 없습니다</button>}</div>; }
+
+function EventEditor({ form,setForm,calendars,editing,saving,onClose,onSave,onDelete }:{form:EventForm;setForm:(f:EventForm)=>void;calendars:CalendarItem[];editing:EventItem|null;saving:boolean;onClose:()=>void;onSave:()=>void;onDelete:()=>void}) { return <div className="modal-backdrop" onMouseDown={()=>!saving&&onClose()}><section className="connect-modal event-editor" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><h2>{editing?"일정 수정":"새 일정"}</h2><label><span>일정 제목</span><input autoFocus value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="무엇을 할 예정인가요?"/></label><div className="form-row"><label><span>날짜</span><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></label><label className="all-day"><span>시간</span><button className={`toggle-switch ${form.allDay?"on":""}`} onClick={()=>setForm({...form,allDay:!form.allDay})}><i/></button><small>종일</small></label></div>{!form.allDay&&<div className="form-row"><label><span>시작</span><input type="time" value={form.startTime} onChange={e=>setForm({...form,startTime:e.target.value})}/></label><label><span>종료</span><input type="time" value={form.endTime} onChange={e=>setForm({...form,endTime:e.target.value})}/></label></div>}<label><span>반복</span><select value={form.recurrence} onChange={e=>setForm({...form,recurrence:e.target.value})}><option value="">반복 안 함</option><option value="FREQ=DAILY">매일</option><option value="FREQ=WEEKLY">매주</option><option value="FREQ=MONTHLY">매월</option><option value="FREQ=YEARLY">매년</option></select></label><label><span>저장할 캘린더</span><select value={form.calendarKey} disabled={Boolean(editing)} onChange={e=>setForm({...form,calendarKey:e.target.value})}><option value="">캘린더 선택</option>{(["icloud","google","daou"] as Source[]).map(s=><optgroup key={s} label={sourceLabel[s]}>{calendars.filter(c=>c.source===s).map(c=><option value={`${s}:${c.id}`} key={`${s}:${c.id}`}>{c.name}</option>)}</optgroup>)}</select></label><div className="editor-actions">{editing&&<button className="delete-event" onClick={onDelete} disabled={saving}>삭제</button>}<button className="cancel-event" onClick={onClose}>취소</button><button className="modal-connect" onClick={onSave} disabled={saving}>{saving?"저장 중…":"저장"}</button></div></section></div>; }

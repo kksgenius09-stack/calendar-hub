@@ -77,6 +77,18 @@ async function davRequest(url: string, credentials: ICloudCredentials, method: "
   return response.text();
 }
 
+async function davWrite(url: string, credentials: ICloudCredentials, method: "PUT" | "DELETE", body?: string) {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      authorization: basicAuth(credentials),
+      ...(body ? { "content-type": "text/calendar; charset=utf-8" } : {}),
+    },
+    body,
+  });
+  if (!response.ok) throw new Error(`CALDAV_HTTP_${response.status}`);
+}
+
 export async function discoverICloudCalendars(credentials: ICloudCredentials, serverUrl = "https://caldav.icloud.com/") {
   const root = serverUrl.endsWith("/") ? serverUrl : `${serverUrl}/`;
   const suppliedUrl = new URL(root);
@@ -116,8 +128,12 @@ function parseIcsDate(value: string) {
 export async function fetchICloudEvents(credentials: ICloudCredentials, calendar: ICloudCalendar, start: Date, end: Date) {
   const compact = (date: Date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const xml = await davRequest(calendar.url, credentials, "REPORT", `<?xml version="1.0" encoding="utf-8"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="${compact(start)}" end="${compact(end)}"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`, "1");
-  const calendarData = [...xml.matchAll(/<[^>]*calendar-data[^>]*>([\s\S]*?)<\/[^>]*calendar-data>/gi)].map((match) => decodeXml(match[1]));
-  return calendarData.flatMap((ics) => {
+  const blocks = xml.match(/<[^>]*response[^>]*>[\s\S]*?<\/[^>]*response>/gi) ?? [];
+  return blocks.flatMap((block) => {
+    const dataMatch = block.match(/<[^>]*calendar-data[^>]*>([\s\S]*?)<\/[^>]*calendar-data>/i);
+    if (!dataMatch) return [];
+    const ics = decodeXml(dataMatch[1]);
+    const resourceUrl = new URL(tagValue(block, "href"), calendar.url).toString();
     const unfolded = ics.replace(/\r?\n[ \t]/g, "");
     const items = unfolded.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) ?? [];
     return items.flatMap((item) => {
@@ -126,6 +142,8 @@ export async function fetchICloudEvents(credentials: ICloudCredentials, calendar
       if (!startValue) return [];
       return [{
         id: `${calendar.id}:${line("UID") || startValue}`,
+        providerEventId: line("UID") || startValue,
+        resourceUrl,
         calendarId: calendar.id,
         calendarName: calendar.name,
         calendarColor: calendar.color,
@@ -133,9 +151,44 @@ export async function fetchICloudEvents(credentials: ICloudCredentials, calendar
         start: parseIcsDate(startValue),
         end: parseIcsDate(line("DTEND")),
         allDay: /^\d{8}$/.test(startValue),
+        recurrence: line("RRULE"),
       }];
     });
   });
+}
+
+function icsEscape(value: string) {
+  return value.replaceAll("\\", "\\\\").replaceAll("\n", "\\n").replaceAll(",", "\\,").replaceAll(";", "\\;");
+}
+
+function compactDate(value: string, allDay: boolean) {
+  if (allDay) return value.slice(0, 10).replaceAll("-", "");
+  return new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+export type CalDavEventInput = { uid?: string; title: string; start: string; end: string; allDay: boolean; recurrence?: string };
+
+function eventIcs(input: CalDavEventInput) {
+  const uid = input.uid || `${crypto.randomUUID()}@oncal`;
+  const dateType = input.allDay ? ";VALUE=DATE" : "";
+  const recurrence = input.recurrence ? `\r\nRRULE:${input.recurrence}` : "";
+  return { uid, body: `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//OnCal//Calendar//KO\r\nCALSCALE:GREGORIAN\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nDTSTAMP:${compactDate(new Date().toISOString(), false)}\r\nDTSTART${dateType}:${compactDate(input.start, input.allDay)}\r\nDTEND${dateType}:${compactDate(input.end, input.allDay)}\r\nSUMMARY:${icsEscape(input.title)}${recurrence}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n` };
+}
+
+export async function createCalDavEvent(credentials: ICloudCredentials, calendar: ICloudCalendar, input: CalDavEventInput) {
+  const event = eventIcs(input);
+  const url = new URL(`${encodeURIComponent(event.uid)}.ics`, calendar.url.endsWith("/") ? calendar.url : `${calendar.url}/`).toString();
+  await davWrite(url, credentials, "PUT", event.body);
+  return { uid: event.uid, resourceUrl: url };
+}
+
+export async function updateCalDavEvent(credentials: ICloudCredentials, resourceUrl: string, input: CalDavEventInput) {
+  const event = eventIcs(input);
+  await davWrite(resourceUrl, credentials, "PUT", event.body);
+}
+
+export async function deleteCalDavEvent(credentials: ICloudCredentials, resourceUrl: string) {
+  await davWrite(resourceUrl, credentials, "DELETE");
 }
 
 export const iCloudCookie = {

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
       response_type: "code",
-      scope: "https://www.googleapis.com/auth/calendar.readonly",
+      scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events",
       access_type: "offline",
       include_granted_scopes: "true",
       prompt: "consent",
