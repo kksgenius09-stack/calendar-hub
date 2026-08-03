@@ -61,6 +61,7 @@ export async function discoverCompanyCalendars(credentials: CompanyCalDavCredent
       if (calendars.length) return calendars;
     } catch (error) {
       lastError = error;
+      if (error instanceof Error && (error.message === "CALDAV_HTTP_401" || error.message === "CALDAV_HTTP_403")) throw error;
     }
   }
   throw lastError instanceof Error ? lastError : new Error("CalDAV calendar discovery failed");

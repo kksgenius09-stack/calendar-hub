@@ -73,7 +73,7 @@ async function davRequest(url: string, credentials: ICloudCredentials, method: "
     },
     body,
   });
-  if (!response.ok) throw new Error(`iCloud CalDAV request failed (${response.status})`);
+  if (!response.ok) throw new Error(`CALDAV_HTTP_${response.status}`);
   return response.text();
 }
 
@@ -81,11 +81,11 @@ export async function discoverICloudCalendars(credentials: ICloudCredentials, se
   const root = serverUrl.endsWith("/") ? serverUrl : `${serverUrl}/`;
   const principalXml = await davRequest(root, credentials, "PROPFIND", `<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>`, "0");
   const principalHref = tagValue(principalXml, "current-user-principal");
-  if (!principalHref) throw new Error("iCloud principal was not found");
+  if (!principalHref) throw new Error("CALDAV_PRINCIPAL_NOT_FOUND");
   const principalUrl = new URL(principalHref, root).toString();
   const homeXml = await davRequest(principalUrl, credentials, "PROPFIND", `<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><c:calendar-home-set/></d:prop></d:propfind>`, "0");
   const homeHref = tagValue(homeXml, "calendar-home-set");
-  if (!homeHref) throw new Error("iCloud calendar home was not found");
+  if (!homeHref) throw new Error("CALDAV_HOME_NOT_FOUND");
   const homeUrl = new URL(homeHref, principalUrl).toString();
   const listXml = await davRequest(homeUrl, credentials, "PROPFIND", `<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:apple="http://apple.com/ns/ical/"><d:prop><d:displayname/><d:resourcetype/><apple:calendar-color/></d:prop></d:propfind>`, "1");
   const blocks = listXml.match(/<[^>]*response[^>]*>[\s\S]*?<\/[^>]*response>/gi) ?? [];

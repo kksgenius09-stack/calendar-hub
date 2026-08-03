@@ -12,7 +12,15 @@ export async function POST(request: Request) {
     response.cookies.set(companyCalDavCookie.name, await sealCompanyCredentials(credentials), companyCalDavCookie.options);
     return response;
   } catch (error) {
-    const message = error instanceof Error && error.message.includes("주소") ? error.message : "연결에 실패했습니다. 서버 주소와 로그인 정보를 확인해 주세요.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const code = error instanceof Error ? error.message : "UNKNOWN";
+    const messages: Record<string, string> = {
+      CALDAV_HTTP_401: "서버가 로그인을 거부했습니다. 아이디와 비밀번호를 확인해 주세요.",
+      CALDAV_HTTP_403: "로그인은 확인됐지만 CalDAV 사용 권한이 없습니다. 회사 관리자 설정을 확인해 주세요.",
+      CALDAV_HTTP_404: "이 서버에서 CalDAV 경로를 찾지 못했습니다.",
+      CALDAV_PRINCIPAL_NOT_FOUND: "서버 로그인은 됐지만 사용자 캘린더 경로를 확인하지 못했습니다.",
+      CALDAV_HOME_NOT_FOUND: "사용자 인증은 됐지만 캘린더 보관함 경로를 확인하지 못했습니다.",
+    };
+    const message = code.includes("주소") ? code : messages[code] || "서버에는 접속했지만 CalDAV 응답을 해석하지 못했습니다.";
+    return NextResponse.json({ error: message, code }, { status: 400 });
   }
 }
