@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/app/lib/supabase/server";
+import { sealTokens } from "@/app/lib/google-oauth";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -7,8 +8,25 @@ export async function GET(request: Request) {
   const next = url.searchParams.get("next")?.startsWith("/") ? url.searchParams.get("next")! : "/";
   if (code) {
     const supabase = await getSupabaseServerClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(new URL(next, url.origin));
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data.session) {
+      if (data.session.provider_token) {
+        const sealed = await sealTokens({
+          access_token: data.session.provider_token,
+          refresh_token: data.session.provider_refresh_token || undefined,
+          expires_at: Date.now() + 55 * 60 * 1000,
+        });
+        const { error: connectionError } = await supabase.from("calendar_connections").upsert({
+          user_id: data.session.user.id,
+          provider: "google",
+          encrypted_credentials: sealed,
+          account_label: data.session.user.email || "Google",
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,provider" });
+        if (connectionError) return NextResponse.redirect(new URL("/?google=failed", url.origin));
+      } else if (next.includes("google=connected")) return NextResponse.redirect(new URL("/?google=failed", url.origin));
+      return NextResponse.redirect(new URL(next, url.origin));
+    }
   }
   return NextResponse.redirect(new URL("/?auth=failed", url.origin));
 }
