@@ -77,8 +77,8 @@ async function davRequest(url: string, credentials: ICloudCredentials, method: "
   return response.text();
 }
 
-export async function discoverICloudCalendars(credentials: ICloudCredentials) {
-  const root = "https://caldav.icloud.com/";
+export async function discoverICloudCalendars(credentials: ICloudCredentials, serverUrl = "https://caldav.icloud.com/") {
+  const root = serverUrl.endsWith("/") ? serverUrl : `${serverUrl}/`;
   const principalXml = await davRequest(root, credentials, "PROPFIND", `<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>`, "0");
   const principalHref = tagValue(principalXml, "current-user-principal");
   if (!principalHref) throw new Error("iCloud principal was not found");

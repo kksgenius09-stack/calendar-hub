@@ -71,6 +71,20 @@ button { color: inherit; }
 .status-dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: #32b781; box-shadow: 0 0 0 3px #e8f8f1; }
 .privacy-note { color: #a0a6ae; font-size: 9px; text-align: center; margin: 10px 0 0; }
 
+.modal-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: #17192566; backdrop-filter: blur(6px); }
+.connect-modal { position: relative; width: min(430px, 100%); padding: 30px; border: 1px solid #e3e4ea; border-radius: 18px; background: #fff; box-shadow: 0 24px 70px #20233135; }
+.modal-close { position: absolute; top: 15px; right: 16px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f3f4f7; color: #737985; font-size: 20px; cursor: pointer; }
+.modal-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; background: #e5f6f1; color: #24856d; font-size: 20px; }
+.connect-modal h2 { margin: 15px 0 7px; font-size: 20px; }
+.connect-modal > p { margin: 0 0 20px; color: #777e8a; font-size: 12px; line-height: 1.6; }
+.connect-modal label { display: block; margin-top: 13px; }
+.connect-modal label span { display: block; margin-bottom: 6px; color: #525865; font-size: 11px; font-weight: 700; }
+.connect-modal input { width: 100%; height: 42px; padding: 0 12px; border: 1px solid #dfe1e7; border-radius: 9px; outline: none; color: #262a35; font-size: 12px; }
+.connect-modal input:focus { border-color: #6a62e8; box-shadow: 0 0 0 3px #6259e817; }
+.connect-modal small { display: block; margin: 13px 1px 18px; color: #969ca6; font-size: 9px; line-height: 1.5; }
+.modal-connect { width: 100%; height: 43px; border: 0; border-radius: 9px; background: #5b53e9; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+.modal-connect:disabled { background: #c6c4e7; cursor: default; }
+
 .calendar-area { flex: 1; min-width: 0; padding: 19px 22px 25px; overflow: hidden; }
 .quick-add { height: 48px; max-width: 830px; margin: 0 auto 17px; display: flex; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 11px; padding: 0 7px 0 16px; box-shadow: 0 4px 18px #2f34410a; }
 .spark { color: var(--accent); font-size: 18px; margin-right: 10px; }

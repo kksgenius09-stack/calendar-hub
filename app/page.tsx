@@ -63,6 +63,13 @@ export default function Home() {
   const [iCloudEvents, setICloudEvents] = useState<EventItem[]>([]);
   const [iCloudCalendars, setICloudCalendars] = useState<GoogleCalendarItem[]>([]);
   const [visibleICloudCalendars, setVisibleICloudCalendars] = useState<Record<string, boolean>>({});
+  const [companyConnected, setCompanyConnected] = useState(false);
+  const [companyEvents, setCompanyEvents] = useState<EventItem[]>([]);
+  const [companyCalendars, setCompanyCalendars] = useState<GoogleCalendarItem[]>([]);
+  const [visibleCompanyCalendars, setVisibleCompanyCalendars] = useState<Record<string, boolean>>({});
+  const [calDavModal, setCalDavModal] = useState(false);
+  const [calDavForm, setCalDavForm] = useState({ serverUrl: "", email: "", password: "" });
+  const [calDavConnecting, setCalDavConnecting] = useState(false);
 
   useEffect(() => {
     fetch("/api/google/events")
@@ -123,6 +130,28 @@ export default function Home() {
       })
       .catch(() => setICloudConnected(false));
 
+    fetch("/api/caldav/events")
+      .then((response) => response.json())
+      .then((data: { connected?: boolean; calendars?: Array<{ id: string; name: string; color: string }>; events?: Array<{ id: string; calendarId: string; calendarColor?: string; title: string; start?: string; allDay?: boolean }> }) => {
+        setCompanyConnected(Boolean(data.connected));
+        const calendars = (data.calendars ?? []).map((calendar) => ({ ...calendar, primary: false, selected: true }));
+        setCompanyCalendars(calendars);
+        let saved: Record<string, boolean> = {};
+        try { saved = JSON.parse(localStorage.getItem("oncal-company-calendars") || "{}"); } catch { saved = {}; }
+        setVisibleCompanyCalendars(Object.fromEntries(calendars.map((calendar) => [calendar.id, saved[calendar.id] ?? true])));
+        setCompanyEvents((data.events ?? []).flatMap((event) => {
+          if (!event.start) return [];
+          const start = new Date(event.start);
+          if (Number.isNaN(start.getTime()) || start.getFullYear() !== 2026 || start.getMonth() !== 7) return [];
+          return [{
+            id: event.id, day: start.getDate(), title: event.title,
+            time: event.allDay ? "종일" : start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
+            source: "daou" as const, calendarId: event.calendarId, color: event.calendarColor,
+          }];
+        }));
+      })
+      .catch(() => setCompanyConnected(false));
+
     const googleResult = new URLSearchParams(window.location.search).get("google");
     if (googleResult === "setup-required") setNotice("Google 연동 설정이 아직 완료되지 않았어요. OAuth 인증정보를 연결해야 합니다.");
     if (googleResult === "failed") setNotice("Google 연결에 실패했어요. 잠시 후 다시 시도해 주세요.");
@@ -134,18 +163,23 @@ export default function Home() {
     if (iCloudResult === "connected") setNotice("iCloud 캘린더가 연결됐어요.");
     if (iCloudResult === "disconnected") setNotice("iCloud 연결을 해제했어요.");
     if (iCloudResult) window.history.replaceState({}, "", window.location.pathname);
+    if (new URLSearchParams(window.location.search).get("caldav") === "disconnected") {
+      setNotice("회사 일정 연결을 해제했어요.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
 
   const filteredEvents = useMemo(
     () => [
-      ...events.filter((event) => event.source !== "google" && event.source !== "icloud"),
+      ...(companyConnected ? companyEvents : events.filter((event) => event.source === "daou")),
       ...(googleConnected ? googleEvents : events.filter((event) => event.source === "google")),
       ...(iCloudConnected ? iCloudEvents : events.filter((event) => event.source === "icloud")),
     ]
       .filter((event) => visible[event.source])
       .filter((event) => event.source !== "google" || !googleConnected || !event.calendarId || visibleGoogleCalendars[event.calendarId])
-      .filter((event) => event.source !== "icloud" || !iCloudConnected || !event.calendarId || visibleICloudCalendars[event.calendarId]),
-    [visible, visibleGoogleCalendars, visibleICloudCalendars, googleConnected, googleEvents, iCloudConnected, iCloudEvents],
+      .filter((event) => event.source !== "icloud" || !iCloudConnected || !event.calendarId || visibleICloudCalendars[event.calendarId])
+      .filter((event) => event.source !== "daou" || !companyConnected || !event.calendarId || visibleCompanyCalendars[event.calendarId]),
+    [visible, visibleGoogleCalendars, visibleICloudCalendars, visibleCompanyCalendars, googleConnected, googleEvents, iCloudConnected, iCloudEvents, companyConnected, companyEvents],
   );
 
   const toggleGoogleCalendar = (calendarId: string) => {
@@ -158,6 +192,29 @@ export default function Home() {
     const next = { ...visibleICloudCalendars, [calendarId]: !visibleICloudCalendars[calendarId] };
     setVisibleICloudCalendars(next);
     localStorage.setItem("oncal-icloud-calendars", JSON.stringify(next));
+  };
+
+  const toggleCompanyCalendar = (calendarId: string) => {
+    const next = { ...visibleCompanyCalendars, [calendarId]: !visibleCompanyCalendars[calendarId] };
+    setVisibleCompanyCalendars(next);
+    localStorage.setItem("oncal-company-calendars", JSON.stringify(next));
+  };
+
+  const connectCalDav = async () => {
+    setCalDavConnecting(true);
+    try {
+      const response = await fetch("/api/caldav/connect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(calDavForm),
+      });
+      const data = await response.json() as { connected?: boolean; error?: string };
+      if (!response.ok || !data.connected) throw new Error(data.error || "연결에 실패했습니다.");
+      window.location.reload();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "연결에 실패했습니다.");
+      setCalDavConnecting(false);
+    }
   };
 
   const submitQuick = () => {
@@ -218,7 +275,7 @@ export default function Home() {
                   />
                   <span className={`checkmark ${source}`}>✓</span>
                   <span>{sourceLabel[source]}</span>
-                  <em>{source === "icloud" ? (iCloudConnected ? "연결됨" : iCloudReady ? "미연결" : "설정 필요") : source === "google" ? (googleConnected ? "연결됨" : googleReady ? "미연결" : "설정 필요") : "업무"}</em>
+                  <em>{source === "icloud" ? (iCloudConnected ? "연결됨" : iCloudReady ? "미연결" : "설정 필요") : source === "google" ? (googleConnected ? "연결됨" : googleReady ? "미연결" : "설정 필요") : companyConnected ? "연결됨" : "미연결"}</em>
                 </label>
                 {source === "icloud" && iCloudConnected && visible.icloud && (
                   <div className="google-calendar-children" aria-label="연결된 iCloud 캘린더">
@@ -247,6 +304,21 @@ export default function Home() {
                         <span className="checkmark google-child" style={{ backgroundColor: calendar.color }}>✓</span>
                         <span className="calendar-child-name">{calendar.name}</span>
                         {calendar.primary && <em>기본</em>}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {source === "daou" && companyConnected && visible.daou && (
+                  <div className="google-calendar-children" aria-label="연결된 회사 캘린더">
+                    {companyCalendars.map((calendar) => (
+                      <label className="calendar-row calendar-child" key={calendar.id}>
+                        <input
+                          type="checkbox"
+                          checked={visibleCompanyCalendars[calendar.id] ?? true}
+                          onChange={() => toggleCompanyCalendar(calendar.id)}
+                        />
+                        <span className="checkmark google-child" style={{ backgroundColor: calendar.color }}>✓</span>
+                        <span className="calendar-child-name">{calendar.name}</span>
                       </label>
                     ))}
                   </div>
@@ -281,6 +353,11 @@ export default function Home() {
                   setNotice("Google OAuth 인증정보가 아직 설정되지 않았어요. 인증정보를 추가한 후 연결할 수 있어요.");
                 }}
               >+ &nbsp;Google 캘린더 연결</a>
+            )}
+            {companyConnected ? (
+              <form action="/api/caldav/disconnect" method="post"><button className="connect-calendar" type="submit">회사 일정 연결 해제</button></form>
+            ) : (
+              <button className="connect-calendar" type="button" onClick={() => setCalDavModal(true)}>+ &nbsp;회사 일정 연결</button>
             )}
           </section>
 
@@ -321,6 +398,22 @@ export default function Home() {
         </section>
       </div>
 
+      {calDavModal && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => !calDavConnecting && setCalDavModal(false)}>
+          <section className="connect-modal" role="dialog" aria-modal="true" aria-labelledby="caldav-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" type="button" aria-label="닫기" onClick={() => setCalDavModal(false)}>×</button>
+            <span className="modal-icon">↻</span>
+            <h2 id="caldav-title">회사 일정 연결</h2>
+            <p>회사에서 안내받은 CalDAV 정보를 입력하세요. 입력한 비밀번호는 암호화되어 저장됩니다.</p>
+            <label><span>CalDAV 서버 주소</span><input type="url" placeholder="https://calendar.company.com/" value={calDavForm.serverUrl} onChange={(event) => setCalDavForm({ ...calDavForm, serverUrl: event.target.value })} /></label>
+            <label><span>아이디 또는 이메일</span><input type="text" autoComplete="username" placeholder="name@company.com" value={calDavForm.email} onChange={(event) => setCalDavForm({ ...calDavForm, email: event.target.value })} /></label>
+            <label><span>비밀번호 또는 앱 암호</span><input type="password" autoComplete="current-password" placeholder="회사에서 발급받은 암호" value={calDavForm.password} onChange={(event) => setCalDavForm({ ...calDavForm, password: event.target.value })} onKeyDown={(event) => event.key === "Enter" && connectCalDav()} /></label>
+            <small>일반 계정 비밀번호 대신 앱 전용 암호를 지원한다면 앱 암호 사용을 권장합니다.</small>
+            <button className="modal-connect" type="button" disabled={calDavConnecting || !calDavForm.serverUrl || !calDavForm.email || !calDavForm.password} onClick={connectCalDav}>{calDavConnecting ? "연결 확인 중…" : "연결하기"}</button>
+          </section>
+        </div>
+      )}
+
       {notice && <div className="toast"><span>✓</span>{notice}</div>}
     </main>
   );
@@ -336,7 +429,7 @@ function DayCell({ day, events, muted, today }: { day: number; events: EventItem
             className={`event ${event.source}`}
             key={event.id || `${event.title}-${event.time}`}
             title={`${sourceLabel[event.source]} · ${event.title}`}
-            style={(event.source === "google" || event.source === "icloud") && event.color ? { borderLeftColor: event.color, backgroundColor: `${event.color}20` } : undefined}
+            style={event.color ? { borderLeftColor: event.color, backgroundColor: `${event.color}20` } : undefined}
           >
             <span>{event.time}</span>{event.title}
           </button>
