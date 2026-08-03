@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import KoreanLunarCalendar from "korean-lunar-calendar";
 
 type Source = "icloud" | "google" | "daou";
 type EventItem = {
@@ -55,6 +56,13 @@ const monthCells = [
   ...trailingDays.map((day) => ({ day, muted: true })),
 ];
 
+function getLunarLabel(day: number) {
+  const lunar = new KoreanLunarCalendar();
+  if (!lunar.setSolarDate(calendarYear, calendarMonth + 1, day)) return "";
+  const date = lunar.getLunarCalendar();
+  return `음 ${date.intercalation ? "윤" : ""}${date.month}.${date.day}`;
+}
+
 export default function Home() {
   const [visible, setVisible] = useState<Record<Source, boolean>>({
     icloud: true,
@@ -82,9 +90,12 @@ export default function Home() {
   const [calDavForm, setCalDavForm] = useState({ serverUrl: "", email: "", password: "" });
   const [calDavConnecting, setCalDavConnecting] = useState(false);
   const [today, setToday] = useState<Date | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showLunar, setShowLunar] = useState(false);
 
   useEffect(() => {
     setToday(new Date());
+    setShowLunar(localStorage.getItem("oncal-show-lunar") === "true");
     fetch("/api/google/events")
       .then((response) => response.json())
       .then((data: { connected?: boolean; configured?: boolean; calendars?: GoogleCalendarItem[]; events?: Array<{ id: string; calendarId: string; calendarColor?: string; title: string; start?: string; allDay?: boolean }> }) => {
@@ -235,6 +246,12 @@ export default function Home() {
     }
   };
 
+  const toggleLunar = () => {
+    const next = !showLunar;
+    setShowLunar(next);
+    localStorage.setItem("oncal-show-lunar", String(next));
+  };
+
   const submitQuick = () => {
     if (!quickInput.trim()) return;
     setNotice(`“${quickInput}” 일정을 파악했어요. 저장 위치만 선택하면 됩니다.`);
@@ -282,7 +299,16 @@ export default function Home() {
           </section>
 
           <section className="calendar-list">
-            <div className="section-heading"><b>내 캘린더</b><button>···</button></div>
+            <div className="section-heading">
+              <b>내 캘린더</b>
+              <button aria-label="캘린더 설정" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>···</button>
+              {settingsOpen && (
+                <div className="calendar-settings">
+                  <div><span className="settings-icon">달</span><span><b>대한민국 음력</b><small>날짜 칸에 음력 월·일 표시</small></span></div>
+                  <button className={`toggle-switch ${showLunar ? "on" : ""}`} type="button" role="switch" aria-checked={showLunar} onClick={toggleLunar}><i /></button>
+                </div>
+              )}
+            </div>
             {(["icloud", "google", "daou"] as Source[]).map((source) => (
               <Fragment key={source}>
                 <label className="calendar-row">
@@ -408,7 +434,7 @@ export default function Home() {
             <div className="month-grid">
               {leadingDays.map((day) => <DayCell key={`prev-${day}`} day={day} muted events={[]} />)}
               {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => (
-                <DayCell key={day} day={day} today={day === todayDay} events={filteredEvents.filter((e) => e.day === day)} />
+                <DayCell key={day} day={day} today={day === todayDay} lunar={showLunar ? getLunarLabel(day) : ""} events={filteredEvents.filter((e) => e.day === day)} />
               ))}
               {trailingDays.map((day) => <DayCell key={`next-${day}`} day={day} muted events={[]} />)}
             </div>
@@ -437,10 +463,10 @@ export default function Home() {
   );
 }
 
-function DayCell({ day, events, muted, today }: { day: number; events: EventItem[]; muted?: boolean; today?: boolean }) {
+function DayCell({ day, events, muted, today, lunar }: { day: number; events: EventItem[]; muted?: boolean; today?: boolean; lunar?: string }) {
   return (
     <div className={`day-cell ${muted ? "muted" : ""} ${today ? "today" : ""}`}>
-      <span className="day-number">{day}</span>
+      <div className="day-label"><span className="day-number">{day}</span>{lunar && <span className="lunar-date">{lunar}</span>}</div>
       <div className="events">
         {events.map((event) => (
           <button
