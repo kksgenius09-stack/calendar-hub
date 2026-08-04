@@ -50,6 +50,8 @@ button { color: inherit; }
 .mini-grid span, .mini-grid button { height: 24px; display: grid; place-items: center; font-size: 10px; border-radius: 7px; }
 .mini-grid button { border: 0; background: transparent; cursor: pointer; }
 .mini-week span { height: 20px; color: #939aa5; font-weight: 600; }
+.mini-grid .sunday { color: #cf5965; }
+.mini-grid .saturday { color: #3478d4; }
 .mini-grid span.muted, .mini-grid button.muted { color: #c7cbd1; }
 .mini-grid span.selected, .mini-grid button.selected { background: var(--accent); color: #fff; font-weight: 700; }
 .calendar-list { padding: 20px 3px; }
@@ -110,14 +112,17 @@ button { color: inherit; }
 .calendar-card { height: calc(100vh - 158px); min-height: 540px; background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 5px 25px #3137470a; }
 .week-header { height: 37px; display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--line); }
 .week-header div { display: grid; place-items: center; font-size: 10px; color: #808894; font-weight: 600; }
-.week-header .weekend { color: #d36f76; }
+.week-header .sunday { color: #cf5965; }
+.week-header .saturday { color: #3478d4; }
 .month-grid { height: calc(100% - 37px); display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(6, 1fr); }
 .day-cell { position: relative; min-width: 0; min-height: 0; padding: 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow: hidden; }
 .day-cell:nth-child(7n) { border-right: 0; }.day-cell:nth-last-child(-n+7) { border-bottom: 0; }
 .day-number { display: grid; place-items: center; width: 22px; height: 22px; font-size: 10px; border-radius: 50%; }
 .day-label { min-height: 22px; display: flex; align-items: center; gap: 4px; }
 .lunar-date { color: #9a9fa8; font-size: 8px; font-weight: 500; white-space: nowrap; }
-.day-cell:nth-child(7n+1) .day-number, .day-cell:nth-child(7n) .day-number { color: #cf6a72; }
+.day-cell:nth-child(7n+1) .day-number, .day-cell.holiday .day-number { color: #cf5965; }
+.day-cell:nth-child(7n) .day-number { color: #3478d4; }
+.holiday-name { min-width: 0; overflow: hidden; color: #cf5965; font-size: 8px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
 .day-cell.muted { background: #fbfbfc; }.day-cell.muted .day-number { color: #c2c6cc; }
 .day-cell.today .day-number { background: var(--accent); color: #fff; font-weight: 700; }
 .events { display: flex; flex-direction: column; gap: 3px; margin-top: 3px; }
@@ -127,6 +132,8 @@ button { color: inherit; }
 .event.google { background: #fff5df; color: #916517; border-left: 2px solid #e3a62e; }
 .event.daou { background: #e5f6f1; color: #247d67; border-left: 2px solid #2a9b7f; }
 .event:hover { filter: brightness(.97); }
+.more-events { width: 100%; padding: 2px 5px; border: 0; background: transparent; color: #686f7b; text-align: left; font-size: 9px; font-weight: 700; cursor: pointer; }
+.more-events:hover { color: var(--accent); text-decoration: underline; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 9px; max-width: calc(100vw - 30px); background: #252936; color: #fff; padding: 12px 17px; border-radius: 10px; font-size: 12px; box-shadow: 0 12px 30px #161a2470; }
 .toast span { color: #76dfb4; }
 .auth-loading { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 14px; background: #f7f7fb; color: #858b95; font-size: 12px; }
@@ -178,6 +185,8 @@ button { color: inherit; }
 .agenda-day > header b { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); font-size: 14px; }
 .agenda-day.today > header b { background: var(--accent); color: #fff; }
 .agenda-day > header span { font-size: 11px; }
+.agenda-day.saturday > header b, .agenda-day.saturday > header span { color: #3478d4; }
+.agenda-day.holiday > header b, .agenda-day.holiday > header span, .agenda-day > header strong { color: #cf5965; }
 .agenda-events { gap: 7px; }
 .agenda-events .event { padding: 9px 10px; font-size: 11px; }
 .empty-day { width: 100%; padding: 24px 4px; border: 1px dashed #dfe1e7; border-radius: 8px; background: #fafafd; color: #a1a6af; font-size: 10px; }
