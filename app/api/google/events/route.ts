@@ -49,12 +49,12 @@ export async function GET(request: NextRequest) {
   } catch { return NextResponse.json({ connected: false, configured, calendars: [], events: [], error: "reconnect_required" }, { status: 401 }); }
 }
 
-function googleBody(body: { title: string; start: string; end: string; allDay: boolean; recurrence?: string }) {
-  return { summary: body.title, start: body.allDay ? { date: body.start.slice(0, 10) } : { dateTime: body.start }, end: body.allDay ? { date: body.end.slice(0, 10) } : { dateTime: body.end }, ...(body.recurrence ? { recurrence: [`RRULE:${body.recurrence}`] } : {}) };
+function googleBody(body: { title: string; start: string; end: string; allDay: boolean; recurrence?: string; description?:string }) {
+  return { summary: body.title, description:body.description, start: body.allDay ? { date: body.start.slice(0, 10) } : { dateTime: body.start }, end: body.allDay ? { date: body.end.slice(0, 10) } : { dateTime: body.end }, ...(body.recurrence ? { recurrence: [`RRULE:${body.recurrence}`] } : {}) };
 }
 
 export async function POST(request: NextRequest) {
-  try { const auth = await access(request); const body = await request.json(); const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(body.calendarId)}/events`, { method: "POST", headers: auth.headers, body: JSON.stringify(googleBody(body)) }); if (!response.ok) return NextResponse.json({ error: response.status === 403 ? "google_reconnect_required" : "save_failed" }, { status: response.status }); return finish({ saved: true }, auth.tokens, auth.refreshed); } catch { return NextResponse.json({ error: "reconnect_required" }, { status: 401 }); }
+  try { const auth = await access(request); const body = await request.json(); const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(body.calendarId)}/events`, { method: "POST", headers: auth.headers, body: JSON.stringify(googleBody(body)) }); if (!response.ok) return NextResponse.json({ error: response.status === 403 ? "google_reconnect_required" : "save_failed" }, { status: response.status }); const event=await response.json() as {id?:string}; return finish({ saved: true, providerEventId:event.id }, auth.tokens, auth.refreshed); } catch { return NextResponse.json({ error: "reconnect_required" }, { status: 401 }); }
 }
 export async function PATCH(request: NextRequest) {
   try { const auth = await access(request); const body = await request.json(); const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(body.calendarId)}/events/${encodeURIComponent(body.providerEventId)}`, { method: "PATCH", headers: auth.headers, body: JSON.stringify(googleBody(body)) }); if (!response.ok) return NextResponse.json({ error: response.status === 403 ? "google_reconnect_required" : "save_failed" }, { status: response.status }); return finish({ saved: true }, auth.tokens, auth.refreshed); } catch { return NextResponse.json({ error: "reconnect_required" }, { status: 401 }); }
