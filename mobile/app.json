@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "OneCalendar",
+    "slug": "onecalendar",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "onecalendar",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.onecalendar.app"
+    },
+    "android": {
+      "package": "com.onecalendar.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#F4F2FF"
+      }
+    },
+    "plugins": ["expo-web-browser"],
+    "splash": {
+      "backgroundColor": "#F7F7FC",
+      "resizeMode": "contain"
+    }
+  }
+}
