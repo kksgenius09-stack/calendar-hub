@@ -1,3 +1,5 @@
+import { runtimeEnv } from "@/app/lib/runtime-env";
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -20,7 +22,7 @@ function base64ToBytes(value: string) {
 }
 
 async function encryptionKey() {
-  const secret = process.env.CALENDAR_CREDENTIAL_SECRET || process.env.GOOGLE_TOKEN_SECRET;
+  const secret = runtimeEnv("CALENDAR_CREDENTIAL_SECRET") || runtimeEnv("GOOGLE_TOKEN_SECRET");
   if (!secret) throw new Error("GOOGLE_TOKEN_SECRET is not configured");
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
@@ -48,10 +50,10 @@ export async function openTokens(value: string): Promise<GoogleTokens> {
 }
 
 export function googleConfig(origin: string) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const clientId = runtimeEnv("GOOGLE_CLIENT_ID");
+  const clientSecret = runtimeEnv("GOOGLE_CLIENT_SECRET");
   if (!clientId || !clientSecret) throw new Error("Google OAuth is not configured");
-  const publicOrigin = (process.env.PUBLIC_APP_URL || origin).replace(/\/$/, "");
+  const publicOrigin = (runtimeEnv("PUBLIC_APP_URL") || origin).replace(/\/$/, "");
   return {
     clientId,
     clientSecret,

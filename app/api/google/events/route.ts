@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { googleConfig, openTokens, sealTokens, type GoogleTokens } from "@/app/lib/google-oauth";
+import { runtimeEnv } from "@/app/lib/runtime-env";
 import { loadConnection, saveConnection } from "@/app/lib/connection-store";
 
 type GoogleCalendar = { id: string; summary?: string; primary?: boolean; selected?: boolean; backgroundColor?: string };
@@ -28,7 +29,7 @@ async function finish(data: unknown, tokens?: GoogleTokens, refreshed?: boolean,
 }
 
 export async function GET(request: NextRequest) {
-  const configured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.CALENDAR_CREDENTIAL_SECRET);
+  const configured = Boolean(runtimeEnv("GOOGLE_CLIENT_ID") && runtimeEnv("GOOGLE_CLIENT_SECRET") && runtimeEnv("CALENDAR_CREDENTIAL_SECRET"));
   try {
     const auth = await access(request);
     const from = request.nextUrl.searchParams.get("from") || new Date(Date.now() - 31 * 86400000).toISOString();
