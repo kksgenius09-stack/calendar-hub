@@ -134,6 +134,15 @@ button { color: inherit; }
 .event:hover { filter: brightness(.97); }
 .more-events { width: 100%; padding: 2px 5px; border: 0; background: transparent; color: #686f7b; text-align: left; font-size: 9px; font-weight: 700; cursor: pointer; }
 .more-events:hover { color: var(--accent); text-decoration: underline; }
+.overflow-backdrop { padding: 16px; }
+.event-overflow-popup { position: relative; width: min(390px,calc(100vw - 32px)); max-height: min(520px,calc(100vh - 48px)); overflow: hidden; padding: 20px; border: 1px solid #e1e3e9; border-radius: 15px; background: #fff; box-shadow: 0 22px 65px #1f233340; }
+.event-overflow-popup > header { position: relative; display: flex; align-items: flex-start; justify-content: space-between; padding: 0 38px 14px 1px; border-bottom: 1px solid var(--line); }
+.event-overflow-popup > header span { color: #9298a2; font-size: 9px; }
+.event-overflow-popup > header h2 { margin: 4px 0 0; color: var(--ink); font-size: 18px; }
+.event-overflow-popup > header small { display: block; margin-top: 5px; color: #cf5965; font-size: 9px; font-weight: 700; }
+.event-overflow-popup .modal-close { top: 0; right: 0; }
+.event-overflow-popup .agenda-events { max-height: 390px; overflow-y: auto; margin-top: 13px; padding-right: 3px; }
+.event-overflow-popup .agenda-events .event { padding: 10px 11px; font-size: 11px; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 9px; max-width: calc(100vw - 30px); background: #252936; color: #fff; padding: 12px 17px; border-radius: 10px; font-size: 12px; box-shadow: 0 12px 30px #161a2470; }
 .toast span { color: #76dfb4; }
 .auth-loading { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 14px; background: #f7f7fb; color: #858b95; font-size: 12px; }
