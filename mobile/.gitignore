@@ -3,3 +3,7 @@ node_modules/
 .env
 .env.local
 dist/
+dist-android/
+dist-ios/
+expo-output.log
+expo-error.log
