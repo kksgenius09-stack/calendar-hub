@@ -13,17 +13,17 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "2.111.0",
-    "expo": "~55.0.0",
-    "expo-auth-session": "~7.1.0",
-    "expo-status-bar": "~3.1.0",
-    "expo-web-browser": "~15.1.0",
+    "expo": "57.0.12",
+    "expo-auth-session": "57.0.6",
+    "expo-status-bar": "57.0.1",
+    "expo-web-browser": "57.0.2",
     "korean-lunar-calendar": "^0.4.0",
-    "react": "19.2.0",
-    "react-native": "0.83.2",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
     "react-native-url-polyfill": "^3.0.0"
   },
   "devDependencies": {
-    "@types/react": "~19.2.2",
-    "typescript": "~5.9.2"
+    "@types/react": "19.2.18",
+    "typescript": "~6.0.3"
   }
 }

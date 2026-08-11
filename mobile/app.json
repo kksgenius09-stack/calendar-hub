@@ -16,10 +16,6 @@
         "backgroundColor": "#F4F2FF"
       }
     },
-    "plugins": ["expo-web-browser"],
-    "splash": {
-      "backgroundColor": "#F7F7FC",
-      "resizeMode": "contain"
-    }
+    "plugins": ["expo-web-browser"]
   }
 }
