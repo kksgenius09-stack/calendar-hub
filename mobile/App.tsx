@@ -127,14 +127,20 @@ function AppContent() {
 
   const loginWithGoogle = async () => {
     if (!supabaseUrl || !supabaseKey) return Alert.alert("앱 설정 필요", "mobile/.env에 Supabase 주소와 Publishable Key를 입력해 주세요.");
-    const redirectTo = AuthSession.makeRedirectUri({ scheme: "onecalendar", path: "auth/callback" });
+    // Expo Go에서는 exp://.../--/auth/callback, 설치 앱에서는 app.json의
+    // onecalendar://auth/callback을 자동으로 사용한다.
+    const redirectTo = AuthSession.makeRedirectUri({ path: "auth/callback" });
+    console.info("[OneCalendar auth redirect]", redirectTo);
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo, skipBrowserRedirect: true, scopes: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events", queryParams: { access_type: "offline", prompt: "consent" } },
     });
     if (error || !data.url) return Alert.alert("로그인 실패", error?.message || "로그인을 시작하지 못했습니다.");
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (result.type !== "success") return;
+    if (result.type !== "success") {
+      if (result.type !== "cancel" && result.type !== "dismiss") Alert.alert("로그인 중단", `앱으로 돌아오지 못했습니다.\n${redirectTo}`);
+      return;
+    }
     const { params, errorCode } = QueryParams.getQueryParams(result.url);
     if (errorCode) return Alert.alert("로그인 실패", params.error_description || "Google 로그인을 완료하지 못했습니다.");
     const accessToken = params.access_token;
