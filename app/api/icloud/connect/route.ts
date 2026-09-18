@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     await saveConnection("icloud", await sealICloudCredentials(credentials), credentials.email);
     return NextResponse.json({ connected: true, calendarCount: calendars.length });
   } catch (error) {
-    if (error instanceof Error && error.message === "AUTH_REQUIRED") return NextResponse.json({ error: "먼저 OnCal에 로그인해 주세요." }, { status: 401 });
+    if (error instanceof Error && error.message === "AUTH_REQUIRED") return NextResponse.json({ error: "먼저 온달력에 로그인해 주세요." }, { status: 401 });
     return NextResponse.json({ error: "iCloud 연결에 실패했어요. Apple 계정과 앱 전용 암호를 확인해 주세요." }, { status: 400 });
   }
 }

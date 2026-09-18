@@ -175,7 +175,7 @@ function eventIcs(input: CalDavEventInput) {
   const dateType = input.allDay ? ";VALUE=DATE" : "";
   const recurrence = input.recurrence ? `\r\nRRULE:${input.recurrence}` : "";
   const description = input.description ? `\r\nDESCRIPTION:${icsEscape(input.description)}` : "";
-  return { uid, body: `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//OnCal//Calendar//KO\r\nCALSCALE:GREGORIAN\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nDTSTAMP:${compactDate(new Date().toISOString(), false)}\r\nDTSTART${dateType}:${compactDate(input.start, input.allDay)}\r\nDTEND${dateType}:${compactDate(input.end, input.allDay)}\r\nSUMMARY:${icsEscape(input.title)}${description}${recurrence}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n` };
+  return { uid, body: `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ONDAL//Calendar//KO\r\nCALSCALE:GREGORIAN\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nDTSTAMP:${compactDate(new Date().toISOString(), false)}\r\nDTSTART${dateType}:${compactDate(input.start, input.allDay)}\r\nDTEND${dateType}:${compactDate(input.end, input.allDay)}\r\nSUMMARY:${icsEscape(input.title)}${description}${recurrence}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n` };
 }
 
 export async function createCalDavEvent(credentials: ICloudCredentials, calendar: ICloudCalendar, input: CalDavEventInput) {
