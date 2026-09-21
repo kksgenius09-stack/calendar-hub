@@ -30,7 +30,8 @@ button { color: inherit; }
 .date-title { display: flex; flex-direction: column; gap: 2px; }
 .date-title span { margin-left: 11px; color: #8d939d; font-size: 9px; font-weight: 600; }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
-.search-button { font-size: 24px; transform: rotate(-20deg); }
+.search-button { display: grid; place-items: center; font-size: 24px; }
+.search-button span { display: block; transform: rotate(-20deg); }
 .view-switch { display: flex; padding: 3px; background: #f1f2f5; border-radius: 9px; }
 .view-switch button { border: 0; background: transparent; font-size: 12px; padding: 6px 10px; border-radius: 7px; cursor: pointer; }
 .view-switch button.active { background: #fff; color: var(--accent); box-shadow: 0 1px 4px #ccd0da80; font-weight: 700; }
@@ -74,6 +75,11 @@ button { color: inherit; }
 .calendar-row input:not(:checked) + .checkmark { background: #fff !important; border: 1px solid #cfd3d9; color: transparent; }
 .checkmark.icloud { background: #5b53e9; }.checkmark.google { background: #e7a938; }.checkmark.daou { background: #2a9b7f; }
 .calendar-row em { font-style: normal; font-size: 9px; color: #9da3ab; margin-left: auto; }
+.calendar-source-row { cursor: default; }
+.source-visibility { min-width: 0; display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.source-fold { width: 25px; height: 25px; display: grid; place-items: center; margin-left: -3px; border: 0; border-radius: 6px; background: transparent; color: #8e949e; font-size: 17px; cursor: pointer; transform: rotate(-90deg); transition: transform .16s ease, background .16s ease; }
+.source-fold:hover { background: #eceef3; }
+.source-fold.open { transform: rotate(0); }
 .google-calendar-children { margin: 0 0 3px 11px; padding: 2px 0 3px 13px; border-left: 1px solid #e6e7ec; }
 .calendar-row.calendar-child { height: 31px; padding-left: 3px; font-size: 11px; }
 .calendar-row.calendar-child:hover { background: #f7f7fb; }
@@ -240,6 +246,34 @@ button { color: inherit; }
 .settings-footer { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
 .settings-footer small { color: #a0a5ad; }
 .settings-footer .modal-connect { width: 88px; margin-left: auto; }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+.search-modal { width: min(620px,100%); padding: 27px; }
+.search-heading { display: flex; align-items: center; gap: 12px; margin: 0 38px 20px 0; }
+.search-heading > span { width: 40px; height: 40px; display: grid; place-items: center; flex: 0 0 40px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 25px; transform: rotate(-20deg); }
+.search-heading h2 { margin: 0 0 3px; font-size: 20px; }
+.search-heading p { margin: 0; color: #9298a2; font-size: 10px; }
+.search-field { position: relative; display: block; margin: 0 !important; }
+.search-field input { height: 48px; padding: 0 44px 0 15px; font-size: 13px; }
+.search-field > i { position: absolute; top: 9px; right: 13px; color: #949aa4; font-style: normal; font-size: 24px; transform: rotate(-20deg); }
+.search-year-controls { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; margin: 12px 0; }
+.search-year-controls button { height: 31px; padding: 0 10px; border: 1px solid #e2e4e9; border-radius: 8px; background: #fff; color: #626975; font-size: 9px; cursor: pointer; }
+.search-year-controls button:hover { border-color: #cfcbed; color: var(--accent); background: #faf9ff; }
+.search-year-controls span { overflow: hidden; color: #9ca1aa; font-size: 9px; text-align: center; white-space: nowrap; text-overflow: ellipsis; }
+.search-results { max-height: min(52vh,480px); overflow-y: auto; border-top: 1px solid #eceef2; }
+.search-result { width: 100%; min-height: 66px; display: flex; align-items: center; gap: 11px; padding: 11px 8px; border: 0; border-bottom: 1px solid #f0f1f4; background: #fff; text-align: left; cursor: pointer; }
+.search-result:hover { background: #f8f8fc; }
+.search-source-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
+.search-source-dot.icloud { background: #5b53e9; }.search-source-dot.google { background: #e7a938; }.search-source-dot.daou { background: #2a9b7f; }
+.search-result-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 4px; }
+.search-result-copy b { overflow: hidden; color: #2b303b; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+.search-result-copy small { margin: 0; color: #9298a2; font-size: 9px; }
+.search-result em { max-width: 120px; overflow: hidden; color: #999faa; font-size: 9px; font-style: normal; white-space: nowrap; text-overflow: ellipsis; }
+.search-empty { min-height: 190px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 7px; padding: 28px; color: #818792; text-align: center; }
+.search-empty b { color: #4c525e; font-size: 12px; }.search-empty span:not(.search-spinner) { max-width: 340px; font-size: 10px; line-height: 1.6; }
+.search-error b { color: #c6535e; }
+.search-spinner { width: 22px; height: 22px; border: 2px solid #e2e0fb; border-top-color: var(--accent); border-radius: 50%; animation: search-spin .8s linear infinite; }
+.search-more { width: 100%; height: 40px; border: 0; background: #f7f6ff; color: var(--accent); font-size: 10px; font-weight: 700; cursor: pointer; }
+@keyframes search-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
   .auth-page { grid-template-columns: 1fr; }.auth-visual { display: none; }.auth-brand { margin-bottom: 38px; }
@@ -247,7 +281,7 @@ button { color: inherit; }
   .mobile-menu { display: flex; width: 31px; height: 31px; border: 0; border-radius: 8px; background: #f1f2f5; flex-direction: column; justify-content: center; gap: 5px; padding: 8px; }
   .mobile-menu span { height: 1px; background: #4d5561; width: 100%; }
   .date-nav h1 { font-size: 15px; margin-left: 4px; }.date-title span { margin-left: 4px; font-size: 8px; }.date-nav > button:not(.today-button) { display: none; }.date-nav .today-button { margin: 0; }
-  .search-button, .view-switch { display: none; }
+  .view-switch { display: none; }
   .workspace { min-height: calc(100vh - 64px); }.sidebar { position: fixed; z-index: 9; left: 0; top: 64px; bottom: 0; transform: translateX(-102%); transition: transform .22s ease; box-shadow: 10px 0 30px #15182420; }.sidebar.open { transform: translateX(0); }
   .calendar-area { padding: 13px 10px; }.quick-add { margin-bottom: 11px; }.shortcut { display: none; }
   .calendar-card { height: calc(100vh - 136px); min-height: 510px; overflow-x: auto; }.week-header, .month-grid { min-width: 720px; }.day-cell { padding: 6px; }
@@ -258,4 +292,8 @@ button { color: inherit; }
 @media (max-width: 520px) {
   .header-actions { gap: 0; }.date-nav .today-button { display: none; }.quick-add button { padding: 0 10px; }.quick-add { padding-left: 11px; }.spark { margin-right: 6px; }
   .time-row { grid-template-columns: 1fr; }
+  .search-modal { padding: 22px 17px; }
+  .search-year-controls { grid-template-columns: 1fr 1fr; }
+  .search-year-controls span { grid-column: 1 / -1; grid-row: 1; }
+  .search-result em { max-width: 80px; }
 }
