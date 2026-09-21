@@ -47,3 +47,14 @@ test("support explains identity verification and complete deletion scope", async
     "연결정보", "음력 반복정보", "외부 캘린더에 이미 생성된 일정",
   ]) assert.match(support, new RegExp(phrase));
 });
+
+test("public legal links appear on both entry and calendar screens", async () => {
+  const [links, home] = await Promise.all([
+    read("app/components/legal-links.tsx"),
+    read("app/page.tsx"),
+  ]);
+  for (const href of ["/privacy", "/terms", "/support"]) {
+    assert.match(links, new RegExp(`href=["']${href}["']`));
+  }
+  assert.ok((home.match(/<LegalLinks/g) ?? []).length >= 2);
+});
