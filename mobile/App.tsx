@@ -6,7 +6,7 @@ import * as QueryParams from "expo-auth-session/build/QueryParams";
 import * as WebBrowser from "expo-web-browser";
 import { StatusBar } from "expo-status-bar";
 import KoreanLunarCalendar from "korean-lunar-calendar";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
@@ -123,6 +123,8 @@ function AppContent() {
     setLoading(false);
   }, [session, cursor, calendarKey]);
 
+  // Provider loading is the external synchronization performed by this effect.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const loginWithGoogle = async () => {

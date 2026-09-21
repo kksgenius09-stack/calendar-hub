@@ -58,3 +58,13 @@ test("public legal links appear on both entry and calendar screens", async () =>
   }
   assert.ok((home.match(/<LegalLinks/g) ?? []).length >= 2);
 });
+
+test("Google verification checklist uses production URLs and exact scopes", async () => {
+  const guide = await read("docs/google-oauth-verification.md");
+  for (const phrase of [
+    "https://ondalcalendar.kr", "https://ondalcalendar.kr/privacy",
+    "https://ondalcalendar.kr/terms", "https://ondalcalendar.kr/support",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events", "미등록",
+  ]) assert.match(guide, new RegExp(phrase.replaceAll(".", "\\.")));
+});
