@@ -22,3 +22,13 @@ test("legal layout is readable on narrow screens", async () => {
   assert.match(css, /\.legal-page\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /@media\s*\(max-width:\s*640px\)/);
 });
+
+test("privacy policy describes every stored credential and user right", async () => {
+  const privacy = await read("app/privacy/page.tsx");
+  for (const phrase of [
+    "Google 사용자 식별값", "이메일 주소", "Google OAuth 토큰",
+    "iCloud", "앱 전용 암호", "CalDAV", "음력 반복",
+    "AES-GCM", "일정 원문을 별도로 복제", "7일 이내",
+    "kksgenius2@gmail.com", "온달력 운영자",
+  ]) assert.match(privacy, new RegExp(phrase));
+});
