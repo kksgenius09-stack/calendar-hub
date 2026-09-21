@@ -21,11 +21,18 @@ export function expandSearchYears(years: number[], direction: "past" | "future")
 }
 
 export function searchCalendarEvents<T extends SearchableCalendarEvent>(events: T[], query: string) {
-  const needle = query.trim().toLocaleLowerCase("ko-KR");
-  if (needle.length < 2) return [];
+  const normalize = (value: string) => value
+    .normalize("NFKC")
+    .toLocaleLowerCase("ko-KR")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+  const terms = query.trim().split(/\s+/).map(normalize).filter(Boolean);
+  if (normalize(query).length < 2) return [];
   const seen = new Set<string>();
   return events
-    .filter(event => `${event.title} ${event.calendarName || ""}`.toLocaleLowerCase("ko-KR").includes(needle))
+    .filter(event => {
+      const haystack = normalize(`${event.title}${event.calendarName || ""}`);
+      return terms.every(term => haystack.includes(term));
+    })
     .filter(event => {
       const key = `${event.source}:${event.calendarId}:${event.id}:${event.start}`;
       if (seen.has(key)) return false;
