@@ -165,13 +165,17 @@ test("월간 일정 바는 이동과 실제 양 끝 조절을 따로 시작한�
   assert.ok(/segment\.startsHere&&<span[\s\S]{0,250}resize-start/.test(page));
   assert.ok(/segment\.endsHere&&<span[\s\S]{0,250}resize-end/.test(page));
   assert.ok(/eventManipulationState\(event\)/.test(page));
+  assert.ok(/const startEventGesture=[\s\S]{0,350}event\.pointerType!=="mouse"/.test(page));
 });
 
 test("월간 이벤트 포인터 취소와 잘못된 놓기는 저장 없이 제스처만 종료한다", async () => {
   const page = await read("app/page.tsx");
-  assert.ok(/onPointerCancel=\{\(\)=>clearEventGesture\(\)\}/.test(page));
-  assert.ok(/event\.key==="Escape"\)[\s\S]{0,80}clearEventGesture\(\)/.test(page));
+  assert.ok(/window\.addEventListener\("pointerup",[^;]+,true\)/.test(page));
+  assert.ok(/window\.addEventListener\("pointercancel",[^;]+,true\)/.test(page));
+  assert.ok(/event\.pointerId!==active\.pointerId/.test(page));
+  assert.ok(/event\.key!=="Escape"[\s\S]{0,500}clearEventGesture\(\)/.test(page));
   assert.ok(/const targetDate=document\.elementFromPoint[\s\S]{0,180}if\(!targetDate\)\{clearEventGesture\(\);return;\}/.test(page));
-  assert.ok(/onPointerUp=\{finishEventGesture\}/.test(page));
+  assert.ok(/window\.addEventListener\("pointermove",[^;]+,true\)/.test(page));
+  assert.ok(/suppressEventClick\.current=true[\s\S]{0,180}setTimeout\(\(\)=>\{suppressEventClick\.current=false[\s\S]{0,80},0\)/.test(page));
   assert.ok(!/onPointerUp=\{[^}]*saveEvent|onPointerUp=\{[^}]*fetch\(/.test(page));
 });

@@ -14,7 +14,7 @@ type CalendarItem = { id: string; name: string; color: string; primary?: boolean
 type EventItem = { id: string; providerEventId?: string; repeatSeriesId?:string; resourceUrl?: string; calendarId: string; calendarName?: string; calendarColor?: string; title: string; start: string; end: string; allDay: boolean; recurrence?: string; source: Source };
 type EventForm = { title: string; startDate: string; endDate: string; startTime: string; endTime: string; allDay: boolean; recurrence: string; calendarKey: string };
 type LunarSeries = { id:string; source:Source; calendar_id:string; title:string; instances:Array<{provider_event_id?:string;resource_url?:string;solar_date:string}> };
-type EventDragState = { event:EventItem; mode:"move"|"resize-start"|"resize-end"; origin:{x:number;y:number}; targetDate:string; dragging:boolean };
+type EventDragState = { event:EventItem; mode:"move"|"resize-start"|"resize-end"; origin:{x:number;y:number}; targetDate:string; pointerId:number; dragging:boolean };
 
 const sourceLabel: Record<Source, string> = { icloud: "iCloud", google: "Google", daou: "회사 일정" };
 const sourcePath: Record<Source, string> = { icloud: "/api/icloud/events", google: "/api/google/events", daou: "/api/caldav/events" };
@@ -245,49 +245,83 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, onCreat
   const [eventDrag,setEventDrag]=useState<EventDragState|null>(null);
   const eventDragRef=useRef<EventDragState|null>(null);
   const suppressEventClick=useRef(false);
+  const suppressClickTimer=useRef<number|null>(null);
+  const cancelledPointerId=useRef<number|null>(null);
   const lastPointerType=useRef("");
   const setEventGesture=useCallback((next:EventDragState|null)=>{eventDragRef.current=next;setEventDrag(next);},[]);
   const clearEventGesture=useCallback(()=>setEventGesture(null),[setEventGesture]);
+  const suppressClickOnce=useCallback(()=>{
+    suppressEventClick.current=true;
+    if(suppressClickTimer.current!==null)window.clearTimeout(suppressClickTimer.current);
+    suppressClickTimer.current=window.setTimeout(()=>{suppressEventClick.current=false;suppressClickTimer.current=null;},0);
+  },[]);
   const startEventGesture=(item:EventItem, event:React.PointerEvent<HTMLButtonElement|HTMLSpanElement>, mode:EventDragState["mode"])=>{
     event.stopPropagation();
-    if(event.button!==0||!eventManipulationState(item).allowed)return;
+    if(event.pointerType!=="mouse"||event.button!==0||!eventManipulationState(item).allowed)return;
     event.preventDefault();
     suppressEventClick.current=false;
+    cancelledPointerId.current=null;
     const startDate=dateKey(parseEventDate(item.start));
-    setEventGesture({event:item,mode,origin:{x:event.clientX,y:event.clientY},targetDate:startDate,dragging:false});
+    setEventGesture({event:item,mode,origin:{x:event.clientX,y:event.clientY},targetDate:startDate,pointerId:event.pointerId,dragging:false});
     event.currentTarget.setPointerCapture(event.pointerId);
   };
-  const updateEventTarget=(targetDate:string)=>{
+  const updateEventTarget=useCallback((targetDate:string)=>{
     const current=eventDragRef.current;
     if(current)setEventGesture({...current,targetDate});
-  };
-  const eventGesturePointerMove=(event:React.PointerEvent)=>{
+  },[setEventGesture]);
+  const eventGesturePointerMove=useCallback((event:PointerEvent)=>{
     const current=eventDragRef.current;
-    if(!current)return;
+    if(!current||event.pointerId!==current.pointerId)return;
     const dragging=current.dragging||isDragGesture(current.origin,{x:event.clientX,y:event.clientY});
     if(!dragging)return;
     const hit=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>("[data-date]");
     const targetDate=hit?.dataset.date;
     setEventGesture({...current,dragging:true,targetDate:targetDate||current.targetDate});
-  };
-  const finishEventGesture=(event:React.PointerEvent)=>{
+  },[setEventGesture]);
+  const finishEventGesture=useCallback((event:PointerEvent)=>{
     const active=eventDragRef.current;
-    if(!active)return;
+    if(!active){
+      if(cancelledPointerId.current===event.pointerId){cancelledPointerId.current=null;suppressClickOnce();event.stopPropagation();}
+      return;
+    }
+    if(event.pointerId!==active.pointerId)return;
     event.stopPropagation();
     if(!active.dragging){clearEventGesture();return;}
-    suppressEventClick.current=true;
+    suppressClickOnce();
     const targetDate=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>("[data-date]")?.dataset.date;
     if(!targetDate){clearEventGesture();return;}
     updateEventTarget(targetDate);
     clearEventGesture();
-  };
+  },[clearEventGesture,suppressClickOnce,updateEventTarget]);
+  const cancelEventGesture=useCallback((event:PointerEvent)=>{
+    const active=eventDragRef.current;
+    if(!active||event.pointerId!==active.pointerId)return;
+    event.stopPropagation();
+    clearEventGesture();
+  },[clearEventGesture]);
+  const cancelEventGestureOnEscape=useCallback((event:KeyboardEvent)=>{
+    if(event.key!=="Escape")return;
+    const active=eventDragRef.current;
+    if(!active)return;
+    cancelledPointerId.current=active.pointerId;
+    event.preventDefault();
+    event.stopPropagation();
+    clearEventGesture();
+  },[clearEventGesture]);
   useEffect(()=>{
-    if(!eventDrag)return;
-    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape"){suppressEventClick.current=true;clearEventGesture();}};
-    document.addEventListener("keydown",closeOnEscape);
-    return()=>document.removeEventListener("keydown",closeOnEscape);
-  },[eventDrag,clearEventGesture]);
-  useEffect(()=>()=>{eventDragRef.current=null;},[]);
+    window.addEventListener("pointermove",eventGesturePointerMove,true);
+    window.addEventListener("pointerup",finishEventGesture,true);
+    window.addEventListener("pointercancel",cancelEventGesture,true);
+    window.addEventListener("keydown",cancelEventGestureOnEscape,true);
+    return()=>{
+      window.removeEventListener("pointermove",eventGesturePointerMove,true);
+      window.removeEventListener("pointerup",finishEventGesture,true);
+      window.removeEventListener("pointercancel",cancelEventGesture,true);
+      window.removeEventListener("keydown",cancelEventGestureOnEscape,true);
+      if(suppressClickTimer.current!==null)window.clearTimeout(suppressClickTimer.current);
+      eventDragRef.current=null;
+    };
+  },[cancelEventGesture,cancelEventGestureOnEscape,eventGesturePointerMove,finishEventGesture]);
   const today = dateKey(new Date());
   if (view === "month") {
     const cells=Array.from({length:42},(_,i)=>addDays(range.start,i));
@@ -305,10 +339,10 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, onCreat
     const layoutSource=previewEvent?events.map(event=>event===eventDrag?.event?previewEvent:event):events;
     const layoutEvents=layoutSource.map(event=>{const id=`${event.source}:${event.calendarId}:${event.id}`;eventByLayoutId.set(id,event);return{id,start:event.start,end:event.end,allDay:event.allDay};});
     const segments=monthEventSegments(layoutEvents,dateKey(range.start));
-    return <div className="calendar-card"><div className="week-header">{weekdays.map((d,i)=><div key={d} className={i===0?"sunday":i===6?"saturday":""}>{d}</div>)}</div><div className="month-grid" onPointerLeave={()=>setDragRange(null)} onPointerMove={eventGesturePointerMove}>{cells.map((d,index)=>{const key=dateKey(d);const holiday=holidayLabel(d);const inDrag=Boolean(selected&&key>=selected.startDate&&key<=selected.endDate);const week=Math.floor(index/7);const column=index%7;const shown=new Set(segments.filter(segment=>segment.week===week&&column>=segment.startColumn&&column<segment.startColumn+segment.span).map(segment=>segment.id));const hidden=Math.max(0,events.filter(event=>eventOccursOnDate(event,key)).length-shown.size);return <div key={key} data-date={key} className={`day-cell ${d.getMonth()!==cursor.getMonth()?"muted":""} ${key===today?"today":""} ${holiday?"holiday":""} ${inDrag?"range-selecting":""}`} onClick={()=>{if(lastPointerType.current!=="mouse")onCreate(d);}} onPointerDown={event=>{lastPointerType.current=event.pointerType;if(eventDragRef.current)return;if(event.pointerType!=="mouse"||event.button!==0)return;event.preventDefault();setDragRange({start:key,end:key});}} onPointerEnter={()=>{updateEventTarget(key);setDragRange(current=>current?{start:current.start,end:key}:null);}} onPointerUp={event=>{if(eventDragRef.current)return;if(event.pointerType!=="mouse"||!dragRange)return;event.preventDefault();const chosen=orderedDateRange(dragRange.start,key);setDragRange(null);if(chosen.startDate===chosen.endDate)onCreate(d);else onCreateRange(new Date(`${chosen.startDate}T00:00:00`),new Date(`${chosen.endDate}T00:00:00`));}}><div className="day-label"><span className="day-number">{d.getDate()}</span>{holiday&&<span className="holiday-name">{holiday}</span>}{showLunar&&<span className="lunar-date">{lunarLabel(d)}</span>}</div>{hidden>0&&<button className="cell-more-events" onPointerDown={event=>event.stopPropagation()} onPointerUp={event=>event.stopPropagation()} onClick={event=>{event.stopPropagation();onShowMore(d,event.currentTarget.getBoundingClientRect());}}>+{hidden}개 더보기</button>}</div>})}<div className="month-events-layer">{segments.map((segment,index)=>{const event=eventByLayoutId.get(segment.id);if(!event)return null;const start=parseEventDate(event.start);const prefix=!event.allDay&&segment.startsHere?`${pad(start.getHours())}:${pad(start.getMinutes())} `:"";const style={gridColumn:`${segment.startColumn+1} / span ${segment.span}`,gridRow:segment.week+1,"--event-lane":segment.lane,...(event.calendarColor?{backgroundColor:event.calendarColor}: {})} as CSSProperties;const manipulation=eventManipulationState(event);return <button key={`${segment.id}:${segment.week}:${index}`} className={`month-event-bar ${event.source} ${segment.startsHere?"starts-here":"continues-before"} ${segment.endsHere?"ends-here":"continues-after"} ${previewEvent===event?"event-drag-preview":""}`} style={style} onPointerDown={pointer=>startEventGesture(event,pointer,"move")} onPointerMove={eventGesturePointerMove} onPointerUp={finishEventGesture} onPointerCancel={()=>clearEventGesture()} onClick={click=>{click.stopPropagation();if(suppressEventClick.current){suppressEventClick.current=false;return;}onEdit(event);}} title={manipulation.allowed?event.title:manipulation.reason} aria-label={manipulation.allowed?event.title:`${event.title} · ${manipulation.reason}`}>
-      {segment.startsHere&&<span role="button" tabIndex={-1} className="month-event-resize-handle resize-start" aria-label="일정 시작일 조절" onPointerDown={pointer=>startEventGesture(event,pointer,"resize-start")} onPointerMove={eventGesturePointerMove} onPointerUp={finishEventGesture} onPointerCancel={()=>clearEventGesture()}/>}
+    return <div className="calendar-card"><div className="week-header">{weekdays.map((d,i)=><div key={d} className={i===0?"sunday":i===6?"saturday":""}>{d}</div>)}</div><div className="month-grid" onPointerLeave={()=>setDragRange(null)}>{cells.map((d,index)=>{const key=dateKey(d);const holiday=holidayLabel(d);const inDrag=Boolean(selected&&key>=selected.startDate&&key<=selected.endDate);const week=Math.floor(index/7);const column=index%7;const shown=new Set(segments.filter(segment=>segment.week===week&&column>=segment.startColumn&&column<segment.startColumn+segment.span).map(segment=>segment.id));const hidden=Math.max(0,events.filter(event=>eventOccursOnDate(event,key)).length-shown.size);return <div key={key} data-date={key} className={`day-cell ${d.getMonth()!==cursor.getMonth()?"muted":""} ${key===today?"today":""} ${holiday?"holiday":""} ${inDrag?"range-selecting":""}`} onClick={()=>{if(lastPointerType.current!=="mouse")onCreate(d);}} onPointerDown={event=>{lastPointerType.current=event.pointerType;if(eventDragRef.current)return;if(event.pointerType!=="mouse"||event.button!==0)return;event.preventDefault();setDragRange({start:key,end:key});}} onPointerEnter={()=>{updateEventTarget(key);setDragRange(current=>current?{start:current.start,end:key}:null);}} onPointerUp={event=>{if(eventDragRef.current)return;if(event.pointerType!=="mouse"||!dragRange)return;event.preventDefault();const chosen=orderedDateRange(dragRange.start,key);setDragRange(null);if(chosen.startDate===chosen.endDate)onCreate(d);else onCreateRange(new Date(`${chosen.startDate}T00:00:00`),new Date(`${chosen.endDate}T00:00:00`));}}><div className="day-label"><span className="day-number">{d.getDate()}</span>{holiday&&<span className="holiday-name">{holiday}</span>}{showLunar&&<span className="lunar-date">{lunarLabel(d)}</span>}</div>{hidden>0&&<button className="cell-more-events" onPointerDown={event=>event.stopPropagation()} onPointerUp={event=>event.stopPropagation()} onClick={event=>{event.stopPropagation();onShowMore(d,event.currentTarget.getBoundingClientRect());}}>+{hidden}개 더보기</button>}</div>})}<div className="month-events-layer">{segments.map((segment,index)=>{const event=eventByLayoutId.get(segment.id);if(!event)return null;const start=parseEventDate(event.start);const prefix=!event.allDay&&segment.startsHere?`${pad(start.getHours())}:${pad(start.getMinutes())} `:"";const style={gridColumn:`${segment.startColumn+1} / span ${segment.span}`,gridRow:segment.week+1,"--event-lane":segment.lane,...(event.calendarColor?{backgroundColor:event.calendarColor}: {})} as CSSProperties;const manipulation=eventManipulationState(event);return <button key={`${segment.id}:${segment.week}:${index}`} className={`month-event-bar ${event.source} ${segment.startsHere?"starts-here":"continues-before"} ${segment.endsHere?"ends-here":"continues-after"} ${previewEvent===event?"event-drag-preview":""}`} style={style} onPointerDown={pointer=>startEventGesture(event,pointer,"move")} onClick={click=>{click.stopPropagation();if(suppressEventClick.current){suppressEventClick.current=false;if(suppressClickTimer.current!==null)window.clearTimeout(suppressClickTimer.current);suppressClickTimer.current=null;return;}onEdit(event);}} title={manipulation.allowed?event.title:manipulation.reason} aria-label={manipulation.allowed?event.title:`${event.title} · ${manipulation.reason}`}>
+      {segment.startsHere&&<span role="button" tabIndex={-1} className="month-event-resize-handle resize-start" aria-label="일정 시작일 조절" onPointerDown={pointer=>startEventGesture(event,pointer,"resize-start")}/>}
       <span>{prefix}{event.title}</span>
-      {segment.endsHere&&<span role="button" tabIndex={-1} className="month-event-resize-handle resize-end" aria-label="일정 종료일 조절" onPointerDown={pointer=>startEventGesture(event,pointer,"resize-end")} onPointerMove={eventGesturePointerMove} onPointerUp={finishEventGesture} onPointerCancel={()=>clearEventGesture()}/>}
+      {segment.endsHere&&<span role="button" tabIndex={-1} className="month-event-resize-handle resize-end" aria-label="일정 종료일 조절" onPointerDown={pointer=>startEventGesture(event,pointer,"resize-end")}/>}
     </button>;})}</div></div></div>;
   }
   const dates = view === "week" ? Array.from({length:7},(_,i)=>addDays(range.start,i)) : [cursor]; return <div className={`calendar-card agenda-card ${view}`}><div className="agenda-columns">{dates.map(d=>{const holiday=holidayLabel(d);return <section className={`agenda-day ${dateKey(d)===today?"today":""} ${holiday?"holiday":""} ${d.getDay()===6?"saturday":""}`} key={dateKey(d)} onClick={()=>onCreate(d)}><header><b>{d.getDate()}</b><span>{weekdays[d.getDay()]}요일{holiday&&<> · <strong>{holiday}</strong></>}</span></header><EventList date={d} events={events} onEdit={onEdit} agenda/></section>})}</div>{loading&&<div className="calendar-loading">일정을 불러오는 중…</div>}</div>;
