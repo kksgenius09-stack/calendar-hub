@@ -29,6 +29,9 @@ const addDays = (d: Date, days: number) => new Date(d.getFullYear(), d.getMonth(
 const parseEventDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
 const isPersonalCompanyCalendar = (name?: string) => (name || "").replaceAll(" ", "").toLowerCase() === "내일정";
 const isCalendarWritable = (calendar: CalendarItem) => calendar.source !== "daou" || isPersonalCompanyCalendar(calendar.name);
+// Temporarily disabled while we isolate the performance regression introduced
+// by desktop event gestures. Normal event editing remains available.
+const enableEventDrag = false;
 
 function lunarLabel(d: Date) { const lunar = new KoreanLunarCalendar(); if (!lunar.setSolarDate(d.getFullYear(), d.getMonth() + 1, d.getDate())) return ""; const v = lunar.getLunarCalendar(); return `음 ${v.intercalation ? "윤" : ""}${v.month}.${v.day}`; }
 function lunarParts(d: Date) { const lunar=new KoreanLunarCalendar(); if(!lunar.setSolarDate(d.getFullYear(),d.getMonth()+1,d.getDate())) throw new Error("음력 변환 범위를 벗어났습니다."); return lunar.getLunarCalendar(); }
@@ -288,6 +291,7 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
   },[]);
   const startEventGesture=(item:EventItem, event:React.PointerEvent<HTMLButtonElement|HTMLSpanElement>, mode:EventDragState["mode"])=>{
     event.stopPropagation();
+    if(!enableEventDrag)return;
     if(saving||event.pointerType!=="mouse"||event.button!==0||!eventManipulationState(item).allowed)return;
     event.preventDefault();
     suppressEventClick.current=false;
