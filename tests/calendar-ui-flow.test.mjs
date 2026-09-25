@@ -159,3 +159,19 @@ test("겹치는 일정은 서로 다른 줄에 배치한다", () => {
 
   assert.deepEqual(segments.map(segment => segment.lane), [0, 1, 2]);
 });
+test("월간 일정 바는 이동과 실제 양 끝 조절을 따로 시작한다", async () => {
+  const page = await read("app/page.tsx");
+  assert.ok(/onPointerDown=\{pointer=>startEventGesture\(event,pointer,"move"\)\}/.test(page));
+  assert.ok(/segment\.startsHere&&<span[\s\S]{0,250}resize-start/.test(page));
+  assert.ok(/segment\.endsHere&&<span[\s\S]{0,250}resize-end/.test(page));
+  assert.ok(/eventManipulationState\(event\)/.test(page));
+});
+
+test("월간 이벤트 포인터 취소와 잘못된 놓기는 저장 없이 제스처만 종료한다", async () => {
+  const page = await read("app/page.tsx");
+  assert.ok(/onPointerCancel=\{\(\)=>clearEventGesture\(\)\}/.test(page));
+  assert.ok(/event\.key==="Escape"\)[\s\S]{0,80}clearEventGesture\(\)/.test(page));
+  assert.ok(/const targetDate=document\.elementFromPoint[\s\S]{0,180}if\(!targetDate\)\{clearEventGesture\(\);return;\}/.test(page));
+  assert.ok(/onPointerUp=\{finishEventGesture\}/.test(page));
+  assert.ok(!/onPointerUp=\{[^}]*saveEvent|onPointerUp=\{[^}]*fetch\(/.test(page));
+});

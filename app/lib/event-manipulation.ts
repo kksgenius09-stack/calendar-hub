@@ -16,6 +16,10 @@ export type EventDateDraft = {
   allDay: boolean;
 };
 
+export function isDragGesture(start: { x: number; y: number }, current: { x: number; y: number }, threshold = 6) {
+  return Math.hypot(current.x - start.x, current.y - start.y) >= threshold;
+}
+
 const pad = (value: number) => String(value).padStart(2, "0");
 const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 const timeKey = (date: Date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;

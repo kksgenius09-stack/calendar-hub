@@ -38,6 +38,11 @@ test("시작일이 없으면 이유를 알리고 일반 일정은 허용한다",
   });
 });
 
+test("6픽셀 미만 이동은 클릭이고 그 이상은 드래그다", () => {
+  assert.equal(manipulation.isDragGesture({ x: 10, y: 10 }, { x: 14, y: 13 }), false);
+  assert.equal(manipulation.isDragGesture({ x: 10, y: 10 }, { x: 16, y: 10 }), true);
+});
+
 test("시간 일정 이동은 날짜 기간과 현지 시작·종료 시각을 유지한다", () => {
   assert.deepEqual(manipulation.moveEventToDate({
     source: "google", start: "2026-09-22T09:00:00+09:00", end: "2026-09-24T10:30:00+09:00", allDay: false,
