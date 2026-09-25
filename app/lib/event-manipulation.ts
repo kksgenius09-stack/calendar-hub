@@ -196,7 +196,18 @@ export async function persistCompletedEventGesture(
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!response.ok) throw new Error("일정 저장 실패");
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (data.error === "read_only_calendar" || (event.source === "daou" && response.status === 403)) {
+        options.setNotice("이 회사 캘린더는 읽기 전용이에요. ‘내 일정’에서만 수정할 수 있어요.");
+      } else if (response.status === 401 || ["auth_required", "reconnect_required", "google_reconnect_required", "invalid_credentials"].includes(data.error || "")) {
+        const provider = event.source === "google" ? "Google" : event.source === "icloud" ? "iCloud" : "회사 일정";
+        options.setNotice(`${provider} 연결이 만료됐어요. 다시 연결해 주세요.`);
+      } else {
+        options.setNotice("일정을 변경하지 못했어요. 원래 일정은 그대로 유지됩니다.");
+      }
+      return false;
+    }
     await options.loadEvents();
     options.setNotice(mode === "move" ? "일정을 이동했어요." : "기간을 변경했어요.");
     return true;

@@ -30,5 +30,7 @@ test("새 회사 일정 시도는 해당 오류만 지우고 실패 시 입력�
   assert.match(submit[1], /setCalDavError\(data\.error\s*\?\?/);
   assert.match(submit[1], /setCalDavError\(/);
   assert.doesNotMatch(submit[1], /setCalDavForm\(/);
-  assert.doesNotMatch(submit[1], /setCalDavModal\(false\)/);
+  const failureBranch = submit[1].match(/if\s*\(!response\.ok\s*\|\|\s*!data\.connected\)\s*\{([^}]+)\}/);
+  assert.ok(failureBranch, "failed connection branch exists");
+  assert.doesNotMatch(failureBranch[1], /setCalDavModal\(false\)/);
 });

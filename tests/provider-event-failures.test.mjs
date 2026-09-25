@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { providerEventFailure } from "../app/lib/provider-event-failures.ts";
+import { providerEventFailure, providerWriteFailure } from "../app/lib/provider-event-failures.ts";
 
 test("explicit missing or invalid credentials mark only that provider disconnected", () => {
   for (const provider of ["google", "icloud", "daou"]) {
@@ -51,4 +51,25 @@ test("all event routes classify failures and do not swallow per-calendar fetch e
 test("a 503 provider result is treated as a preserve-state failure by the page loader", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /if\s*\(!response\.ok\s*&&\s*data\.connected\s*!==\s*false\)\s*return\s*\{\s*source,\s*kind:\s*"failure"/);
+});
+
+test("provider write failures keep auth causes distinct from transient failures", () => {
+  for (const provider of ["google", "icloud", "daou"]) {
+    assert.deepEqual(providerWriteFailure(provider, new Error("CALDAV_HTTP_401")), {
+      status: 401,
+      body: { error: "reconnect_required" },
+    });
+    assert.deepEqual(providerWriteFailure(provider, new TypeError("fetch failed")), {
+      status: 503,
+      body: { error: "save_failed" },
+    });
+  }
+});
+
+test("provider PATCH routes use write failure classification for auth and network errors", async () => {
+  const root = new URL("../", import.meta.url);
+  for (const path of ["app/api/google/events/route.ts", "app/api/icloud/events/route.ts", "app/api/caldav/events/route.ts"]) {
+    const source = await readFile(new URL(path, root), "utf8");
+    assert.match(source, /providerWriteFailure\(/, path);
+  }
 });

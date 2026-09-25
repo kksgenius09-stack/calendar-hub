@@ -37,3 +37,14 @@ export function providerEventFailure(
 
   return { status: explicitlyUnauthenticated ? 401 : 503, body };
 }
+
+export function providerWriteFailure(
+  provider: CalendarProvider,
+  error: unknown,
+): { status: number; body: { error: "auth_required" | "reconnect_required" | "save_failed" } } {
+  const failure = providerEventFailure(provider, undefined, error);
+  return {
+    status: failure.status,
+    body: { error: failure.body.connected ? "save_failed" : failure.body.error },
+  };
+}
