@@ -239,3 +239,13 @@ test("월간 일정 드래그는 유효한 완료만 저장하고 성공 뒤 새
   assert.match(persistence, /await options\.loadEvents\(\)/);
   assert.match(persistence, /method: "PATCH"/);
 });
+
+test("desktop pointerup starts drag persistence before saving state can gate another gesture", async () => {
+  const page = await read("app/page.tsx");
+  const finish = page.match(/const finishEventGesture=useCallback\(\(event:PointerEvent\)=>\{([\s\S]*?)\n  const cancelEventGesture=/);
+  assert.ok(finish, "pointer-up handler exists");
+  assert.match(finish[1], /const active=eventDragRef\.current/);
+  assert.match(finish[1], /void saveDraggedEvent\(active\.event,active\.mode,targetDate/);
+  assert.doesNotMatch(finish[1], /if\(saving\)/);
+  assert.doesNotMatch(page, /eventDragRef\.current=null/);
+});

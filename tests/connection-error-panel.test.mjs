@@ -53,3 +53,12 @@ test("연결 상세 실패는 전역 notice에 노출하지 않고 각 모달에
   assert.doesNotMatch(iCloudSubmit[1], /catch \(error\) \{[^}]*setNotice\(/);
   assert.doesNotMatch(calDavSubmit[1], /catch \(error\) \{[^}]*setNotice\(/);
 });
+
+test("회사 일정 연결 성공은 현재 화면을 유지한 채 모달을 닫고 일정을 다시 불러온다", () => {
+  const submit = page.match(/const connectCalDav = async \(\) => \{([\s\S]*?)\n  const disconnectSource/);
+  assert.ok(submit, "CalDAV submit handler exists");
+  assert.match(submit[1], /setCalDavModal\(false\)/);
+  assert.ok(submit[1].includes('setNotice("회사 일정이 연결됐어요.")'));
+  assert.match(submit[1], /await loadEvents\(\)/);
+  assert.doesNotMatch(submit[1], /location\.reload\(\)/);
+});

@@ -25,3 +25,12 @@ No deployment performed.
 The first pass still treated any exception from provider event routes as reconnect-required. This follow-up makes the route responses distinguish explicit auth failures (`AUTH_REQUIRED`, missing/invalid stored credentials, CalDAV 401, and Google `invalid_grant`/auth-scope errors) from transient network, provider HTTP, calendar-list, or event-read failures. Explicit auth failures remain 401/`connected:false`; transient failures are 503/`connected:true` with a generic error so the loader preserves the last-known provider state. CalDAV event reads now propagate per-calendar errors instead of silently treating them as empty results.
 
 Follow-up verification: `npm run lint` passed; `npm test` passed with 90 tests; `git diff --check` passed. Build continues to emit the existing Vinext compatibility notices noted above.
+
+## Follow-up: company connect and drag feedback
+
+- Successful company CalDAV connection now closes its modal, shows a success notice, and calls `loadEvents()` in place instead of reloading the page.
+- Drag persistence reads safe provider error codes from failed PATCH responses and gives a concise reconnect/read-only explanation where available; all other errors retain the generic failure notice. iCloud/CalDAV PATCH routes now preserve explicit auth failures as reconnect-required and classify transient errors as save failures. Google PATCH network errors no longer masquerade as reconnect-required.
+- Confirmed `finishEventGesture` reads the live `eventDragRef` and calls the persistence handler without a `saving` guard. The pointer-listener effect no longer clears the drag ref during dependency-driven listener refreshes.
+- Added tests for company connection success without reload, desktop move persistence selecting a provider PATCH endpoint, saving not blocking pointer-up, provider-specific reconnect/read-only failure notices, and route write-error classification.
+
+Follow-up verification: focused tests passed (58); full build and test passed with 96 tests, and lint passed. OAuth scopes and redirects remain unchanged. No deployment performed.

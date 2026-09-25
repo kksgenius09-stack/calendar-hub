@@ -205,6 +205,20 @@ test("유효한 완료 제스처는 미리보기를 유지한 채 정확히 한 
   assert.equal(events[0], event);
 });
 
+test("successful desktop move drag calls the selected provider PATCH endpoint", async () => {
+  const requests = [];
+  const event = { source:"daou", calendarId:"내 일정", calendarName:"내 일정", title:"회의", start:"2026-09-22", end:"2026-09-22", allDay:true };
+  const saved = await manipulation.persistCompletedEventGesture(event, "move", "2026-09-24", { dragging:true }, {
+    sourcePath: { google: "/api/google/events", icloud: "/api/icloud/events", daou: "/api/caldav/events" },
+    fetcher: async (url, options) => { requests.push({ url, options }); return { ok:true }; },
+    loadEvents: async () => {}, setSaving: () => {}, onDraft: () => {}, setNotice: () => {},
+  });
+  assert.equal(saved, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "/api/caldav/events");
+  assert.equal(requests[0].options.method, "PATCH");
+});
+
 test("취소되거나 유효하지 않은 release는 PATCH하지 않는다", async () => {
   assert.equal(typeof manipulation.persistCompletedEventGesture, "function");
   let patchCount = 0;
@@ -243,7 +257,7 @@ test("PATCH 실패 시 미리보기와 저장 중 상태를 끝내고 원본 일
   let reloadCount = 0;
   const saved = await manipulation.persistCompletedEventGesture(event, "resize-end", "2026-09-25", { dragging:true }, {
     sourcePath: { google: "/api/google/events", icloud: "/api/icloud/events", daou: "/api/caldav/events" },
-    fetcher: async () => { order.push("PATCH"); return { ok:false }; },
+    fetcher: async () => { order.push("PATCH"); return { ok:false, json:async()=>({error:"read_only_calendar"}) }; },
     loadEvents: async () => { reloadCount++; },
     setSaving: saving => order.push(saving ? "saving" : "idle"),
     onDraft: () => order.push("preview"),
@@ -251,10 +265,22 @@ test("PATCH 실패 시 미리보기와 저장 중 상태를 끝내고 원본 일
   });
 
   assert.equal(saved, false);
-  assert.deepEqual(order, ["preview", "saving", "PATCH", "일정을 변경하지 못했어요. 원래 일정은 그대로 유지됩니다.", "idle"]);
+  assert.deepEqual(order, ["preview", "saving", "PATCH", "이 회사 캘린더는 읽기 전용이에요. ‘내 일정’에서만 수정할 수 있어요.", "idle"]);
   assert.equal(reloadCount, 0);
   assert.equal(events[0], event);
   assert.deepEqual(event, { source:"icloud", calendarId:"home", providerEventId:"uid-1", resourceUrl:"/event/1.ics", title:"약속", start:"2026-09-22", end:"2026-09-23", allDay:true });
+});
+
+test("Google drag PATCH 인증 실패는 재연결 원인을 짧게 알린다", async () => {
+  const notices = [];
+  const event = { source:"google", calendarId:"primary", title:"회의", start:"2026-09-22", end:"2026-09-22", allDay:true };
+  const saved = await manipulation.persistCompletedEventGesture(event, "move", "2026-09-23", { dragging:true }, {
+    sourcePath: { google: "/api/google/events", icloud: "/api/icloud/events", daou: "/api/caldav/events" },
+    fetcher: async () => ({ ok:false, status:401, json:async()=>({error:"reconnect_required"}) }),
+    loadEvents: async () => {}, setSaving: () => {}, onDraft: () => {}, setNotice: notice => notices.push(notice),
+  });
+  assert.equal(saved, false);
+  assert.deepEqual(notices, ["Google 연결이 만료됐어요. 다시 연결해 주세요."]);
 });
 
 test("저장 중인 제스처 미리보기는 포인터와 날짜 호버 업데이트로부터 고정된다", () => {
