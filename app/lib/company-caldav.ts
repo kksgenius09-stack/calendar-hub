@@ -75,8 +75,8 @@ export async function discoverCompanyCalendars(credentials: CompanyCalDavCredent
       if (error instanceof Error) errorCodes.push(error.message);
     }
   }
+  if (discovered) throw new Error("NO_CALENDARS");
   if (errorCodes.includes("CALDAV_HTTP_401")) throw new Error("CALDAV_HTTP_401");
   if (errorCodes.includes("CALDAV_HTTP_403")) throw new Error("CALDAV_HTTP_403");
-  if (discovered && !lastError) throw new Error("NO_CALENDARS");
   throw lastError instanceof Error ? lastError : new Error("CalDAV calendar discovery failed");
 }

@@ -82,3 +82,11 @@ test("캘린더 검색 결과가 비면 안전한 내부 NO_CALENDARS 오류를 
   assert.match(icloud, /throw new Error\("NO_CALENDARS"\)/);
   assert.match(company, /throw new Error\("NO_CALENDARS"\)/);
 });
+
+test("성공한 빈 캘린더 검색은 뒤이은 후보 오류보다 우선한다", async () => {
+  const source = await readFile(new URL("app/lib/company-caldav.ts", new URL("../", import.meta.url)), "utf8");
+
+  const emptyDiscovery = source.indexOf('if (discovered) throw new Error("NO_CALENDARS")');
+  assert.notEqual(emptyDiscovery, -1);
+  assert.ok(emptyDiscovery < source.indexOf('if (errorCodes.includes("CALDAV_HTTP_401"))'));
+});
