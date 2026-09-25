@@ -7,6 +7,7 @@ import { connectionAction, connectionRedirectPath, defaultCalendarState, eventOc
 import { attachLunarSeriesMetadata, eventManipulationState, eventResizeEdges, isDragGesture, moveEventToDate, persistCompletedEventGesture, resolveCalendarDropDate, resizeEventToDate, updateEventGesture, type EventDateDraft, type LunarEventInstanceMetadata } from "@/app/lib/event-manipulation";
 import { expandSearchYears, normalizeExpandedSources, searchCalendarEvents } from "@/app/lib/calendar-search";
 import { mapConnectionError, type ConnectionErrorPayload } from "@/app/lib/connection-errors";
+import { mergeProviderResults, type ProviderState } from "@/app/lib/provider-loading";
 import { ConnectionErrorPanel } from "@/app/components/connection-error-panel";
 import { LegalLinks } from "@/app/components/legal-links";
 
@@ -72,7 +73,12 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [calendars, setCalendars] = useState<CalendarItem[]>([]);
   const [connected, setConnected] = useState<Record<Source, boolean>>({ icloud: false, google: false, daou: false });
-  const [configured, setConfigured] = useState<Record<Source, boolean>>({ icloud: false, google: false, daou: true });
+  const providerState = useRef<ProviderState>({
+    connected: { icloud: false, google: false, daou: false },
+    configured: { icloud: false, google: false, daou: true },
+    calendars: [],
+    events: [],
+  });
   const [sourceVisible, setSourceVisible] = useState<Record<Source, boolean>>({ icloud: true, google: true, daou: true });
   const [calendarVisible, setCalendarVisible] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -119,17 +125,32 @@ export default function Home() {
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
-    const query = `?from=${encodeURIComponent(visibleRange.start.toISOString())}&to=${encodeURIComponent(visibleRange.end.toISOString())}`;
-    const sources: Source[] = ["icloud", "google", "daou"];
-    const [results, lunarSeries] = await Promise.all([
-      Promise.all(sources.map(async source => { try { const response = await fetch(sourcePath[source] + query); const data = await response.json(); return { source, data }; } catch { return { source, data: { connected: false, events: [], calendars: [] } }; } })),
-      fetch("/api/lunar/series").then(async response => response.ok ? await response.json() : { instances:[] }).catch(() => ({ instances:[] })),
-    ]);
-    const nextEvents: EventItem[] = []; const nextCalendars: CalendarItem[] = []; const nextConnected = { ...connected }; const nextConfigured = { ...configured };
-    let savedVisibility: Record<string, boolean> = {}; try { savedVisibility = JSON.parse(localStorage.getItem("oncal-calendar-visibility") || "{}"); } catch { savedVisibility = {}; }
-    const visibility: Record<string, boolean> = {};
-    for (const { source, data } of results) { nextConnected[source] = Boolean(data.connected); if (typeof data.configured === "boolean") nextConfigured[source] = data.configured; for (const c of data.calendars ?? []) { nextCalendars.push({ ...c, source }); visibility[`${source}:${c.id}`] = savedVisibility[`${source}:${c.id}`] ?? c.selected !== false; } for (const e of data.events ?? []) if (e.start) nextEvents.push({ ...e, source }); }
-    setConnected(nextConnected); setConfigured(nextConfigured); setCalendars(nextCalendars); setCalendarVisible(visibility); setEvents(attachLunarSeriesMetadata(nextEvents, lunarSeries.instances as LunarEventInstanceMetadata[] || [])); setLoading(false);
+    try {
+      const query = `?from=${encodeURIComponent(visibleRange.start.toISOString())}&to=${encodeURIComponent(visibleRange.end.toISOString())}`;
+      const sources: Source[] = ["icloud", "google", "daou"];
+      const [results, lunarSeries] = await Promise.all([
+        Promise.all(sources.map(async source => {
+          try {
+            const response = await fetch(sourcePath[source] + query, { signal: AbortSignal.timeout(12_000) });
+            const data = await response.json();
+            if (!response.ok && data.connected !== false) return { source, kind: "failure" as const };
+            return { source, kind: "success" as const, data };
+          } catch {
+            return { source, kind: "failure" as const };
+          }
+        })),
+        fetch("/api/lunar/series", { signal: AbortSignal.timeout(12_000) }).then(async response => response.ok ? await response.json() : { instances:[] }).catch(() => ({ instances:[] })),
+      ]);
+      const next = mergeProviderResults(providerState.current, results);
+      providerState.current = next;
+      let savedVisibility: Record<string, boolean> = {}; try { savedVisibility = JSON.parse(localStorage.getItem("oncal-calendar-visibility") || "{}"); } catch { savedVisibility = {}; }
+      const visibility: Record<string, boolean> = {};
+      for (const calendar of next.calendars) visibility[`${calendar.source}:${calendar.id}`] = savedVisibility[`${calendar.source}:${calendar.id}`] ?? calendar.selected !== false;
+      setConnected(next.connected); setCalendars(next.calendars); setCalendarVisible(visibility);
+      setEvents(attachLunarSeriesMetadata(next.events as EventItem[], lunarSeries.instances as LunarEventInstanceMetadata[] || []));
+    } finally {
+      setLoading(false);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleRangeStart, visibleRangeEnd]);
 
@@ -139,7 +160,7 @@ export default function Home() {
   useEffect(() => { setShowLunar(localStorage.getItem("oncal-show-lunar") === "true"); setAutoSyncMinutes(Number(localStorage.getItem("oncal-auto-sync") || "1")); setDefaultCalendarKey(localStorage.getItem("oncal-default-calendar") || ""); try{setSourceExpanded(normalizeExpandedSources(JSON.parse(localStorage.getItem("oncal-source-expanded")||"null")));}catch{setSourceExpanded(normalizeExpandedSources(null));} const params = new URLSearchParams(location.search); const result = params.get("google") || params.get("icloud") || params.get("caldav"); const connect=params.get("connect"); if(connect==="icloud"||connect==="daou")pendingConnection.current=connect; if (result === "connected") setNotice("캘린더가 연결됐어요."); if (result === "failed") setNotice("연결에 실패했어요. 로그인 정보를 확인해 주세요."); if (result === "setup-required") setNotice("연동 설정이 아직 완료되지 않았어요."); if (result||connect) history.replaceState({}, "", location.pathname); }, []);
   // Calendar loading synchronizes React state with the connected providers.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (userEmail) loadEvents(); else { setLoading(false); setEvents([]); setCalendars([]); setConnected({ icloud:false, google:false, daou:false }); } }, [loadEvents, userEmail]);
+  useEffect(() => { if (userEmail) loadEvents(); else { providerState.current = { connected:{ icloud:false, google:false, daou:false }, configured:{ icloud:false, google:false, daou:true }, calendars:[], events:[] }; setLoading(false); setEvents([]); setCalendars([]); setConnected({ icloud:false, google:false, daou:false }); } }, [loadEvents, userEmail]);
   useEffect(() => { if (!autoSyncMinutes || !userEmail) return; const timer = window.setInterval(loadEvents, autoSyncMinutes * 60_000); return () => window.clearInterval(timer); }, [autoSyncMinutes, loadEvents, userEmail]);
   useEffect(() => { if(!searchOpen||!userEmail||searchQuery.trim().length<2)return; let active=true; const timer=window.setTimeout(async()=>{setSearchLoading(true);setSearchError("");try{const yearlyEvents=await Promise.all(searchYears.map(async year=>{const cached=searchEventCache.current.get(year);if(cached)return cached;const from=new Date(year,0,1).toISOString();const to=new Date(year+1,0,1).toISOString();const query=`?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;const sourceResults=await Promise.all((["icloud","google","daou"] as Source[]).map(async source=>{try{const response=await fetch(sourcePath[source]+query);if(!response.ok)return[];const data=await response.json();return(data.events??[]).filter((event:EventItem)=>event.start).map((event:EventItem)=>({...event,source}));}catch{return[];}}));const combined=sourceResults.flat();searchEventCache.current.set(year,combined);return combined;}));if(active){setSearchResults(searchCalendarEvents(yearlyEvents.flat(),searchQuery));setSearchLimit(50);}}catch{if(active){setSearchResults([]);setSearchError("일정을 검색하지 못했어요. 잠시 후 다시 시도해 주세요.");}}finally{if(active)setSearchLoading(false);}},400);return()=>{active=false;window.clearTimeout(timer);};},[searchOpen,userEmail,searchQuery,searchYears]);
   useEffect(() => { const closeOnEscape = (event: KeyboardEvent) => { if (event.key !== "Escape") return; if (editorOpen && !saving) setEditorOpen(false); else if (overflowPopup) setOverflowPopup(null); else if (searchOpen) setSearchOpen(false); else if (iCloudModal && !iCloudConnecting) setICloudModal(false); else if (calDavModal && !calDavConnecting) setCalDavModal(false); else if (settingsOpen) setSettingsOpen(false); else if (authOpen) setAuthOpen(false); else setAccountOpen(false); }; window.addEventListener("keydown", closeOnEscape); return () => window.removeEventListener("keydown", closeOnEscape); }, [editorOpen, saving, overflowPopup, searchOpen, iCloudModal, iCloudConnecting, calDavModal, calDavConnecting, settingsOpen, authOpen]);
