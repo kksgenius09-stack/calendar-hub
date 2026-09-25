@@ -193,11 +193,11 @@ export default function Home() {
         for(const occurrence of occurrences){const start=form.allDay?occurrence.solarDate:new Date(`${occurrence.solarDate}T${form.startTime}`).toISOString();const end=form.allDay?dateKey(addDays(new Date(`${occurrence.solarDate}T00:00:00`),1)):new Date(new Date(`${occurrence.solarDate}T${form.startTime}`).getTime()+(durationMinutes||0)*60000).toISOString();const response=await fetch(sourcePath[source as Source],{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({calendarId,title:form.title.trim(),start,end,allDay:form.allDay,recurrence:"",description:"온달력 음력 반복"})});const data=await response.json();if(!response.ok)throw new Error(data.error==="read_only_calendar"?"‘내 일정’ 외 회사 캘린더는 읽기 전용입니다.":"음력 반복 일정을 외부 캘린더에 저장하지 못했습니다.");created.push({lunarYear:occurrence.lunarYear,solarDate:occurrence.solarDate,providerEventId:data.providerEventId,resourceUrl:data.resourceUrl});}
         const seriesResponse=await fetch("/api/lunar/series",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:seriesId,source,calendarId,title:form.title.trim(),lunarMonth:base.month,lunarDay:base.day,isLeapMonth:false,allDay:form.allDay,startTime:form.allDay?null:form.startTime,durationMinutes,instances:created})});
         if(!seriesResponse.ok)throw new Error("일정은 생성됐지만 음력 반복 정보를 저장하지 못했습니다.");
-        setEditorOpen(false); setNotice(`매년 음력 ${base.month}월 ${base.day}일 일정 3년 치를 저장했어요.`); void loadEvents(); return;
+        setEditorOpen(false); setNotice(`매년 음력 ${base.month}월 ${base.day}일 일정 3년 치를 저장했어요.`); await loadEvents(); return;
       }
       const body=payload(); const response=await fetch(sourcePath[body.source],{method:editing?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}); const data=await response.json();
       if(!response.ok){if(data.error==="google_reconnect_required")throw new Error("Google 쓰기 권한이 필요합니다. Google 연결을 해제한 뒤 다시 연결해 주세요.");if(data.error==="read_only_calendar")throw new Error("‘내 일정’ 외 회사 캘린더는 읽기 전용입니다.");throw new Error("일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");}
-      setEditorOpen(false);setNotice(editing?"일정을 수정했어요.":"새 일정을 저장했어요.");void loadEvents();
+      setEditorOpen(false);setNotice(editing?"일정을 수정했어요.":"새 일정을 저장했어요.");await loadEvents();
     } catch(e){setNotice(e instanceof Error?e.message:"저장에 실패했어요.");} finally {setSaving(false);}
   };
   const saveDraggedEvent = useCallback((event:EventItem, mode:EventDragState["mode"], targetDate:string|null, gesture:{dragging:boolean;cancelled?:boolean}, onDraft:(draft:EventDateDraft)=>void) => persistCompletedEventGesture(event,mode,targetDate,gesture,{
@@ -303,12 +303,7 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
   const monthGridDropDate=useCallback((clientX:number,clientY:number)=>{
     const pointTarget=document.elementFromPoint(clientX,clientY);
     const targetDate=pointTarget?.closest<HTMLElement>(".month-grid .day-cell[data-date]")?.dataset.date;
-    // Event bars live in a sibling overlay, so `closest('.month-grid')`
-    // is null when the pointer is released on a bar. Resolve the grid from
-    // the calendar card as a stable fallback, then use its cell geometry.
-    const grid=pointTarget?.closest<HTMLElement>(".month-grid")
-      ?? pointTarget?.closest<HTMLElement>(".calendar-card")?.querySelector<HTMLElement>(".month-grid")
-      ?? document.querySelector<HTMLElement>(".calendar-card .month-grid");
+    const grid=pointTarget?.closest<HTMLElement>(".month-grid");
     const cells=Array.from(grid?.querySelectorAll<HTMLElement>(".day-cell[data-date]")||[]).map(cell=>{
       const rect=cell.getBoundingClientRect();
       return {date:cell.dataset.date||"",left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom};

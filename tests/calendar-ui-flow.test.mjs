@@ -236,7 +236,7 @@ test("월간 일정 드래그는 유효한 완료만 저장하고 성공 뒤 새
   assert.ok((page.match(/updateEventGesture\(/g) || []).length >= 2);
   assert.match(page, /updateEventGesture\(current,targetDate,saving\)/);
   assert.match(page, /updateEventGesture\(current,targetDate\|\|current\.targetDate,saving,true\)/);
-  assert.match(persistence, /(?:await|void) options\.loadEvents\(\)/);
+  assert.match(persistence, /await options\.loadEvents\(\)/);
   assert.match(persistence, /method: "PATCH"/);
 });
 

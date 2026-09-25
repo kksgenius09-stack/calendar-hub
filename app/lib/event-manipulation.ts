@@ -208,9 +208,7 @@ export async function persistCompletedEventGesture(
       }
       return false;
     }
-    // Do not block the drag gesture on a full provider sync. The optimistic
-    // preview is already visible; refresh in the background instead.
-    void options.loadEvents();
+    await options.loadEvents();
     options.setNotice(mode === "move" ? "일정을 이동했어요." : "기간을 변경했어요.");
     return true;
   } catch {
