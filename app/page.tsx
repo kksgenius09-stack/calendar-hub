@@ -297,19 +297,19 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
   },[clearEventGesture,saveDraggedEvent,setEventGesture,suppressClickOnce]);
   const cancelEventGesture=useCallback((event:PointerEvent)=>{
     const active=eventDragRef.current;
-    if(!active||event.pointerId!==active.pointerId)return;
+    if(saving||!active||event.pointerId!==active.pointerId)return;
     event.stopPropagation();
     clearEventGesture();
-  },[clearEventGesture]);
+  },[clearEventGesture,saving]);
   const cancelEventGestureOnEscape=useCallback((event:KeyboardEvent)=>{
     if(event.key!=="Escape")return;
     const active=eventDragRef.current;
-    if(!active)return;
+    if(saving||!active)return;
     cancelledPointerId.current=active.pointerId;
     event.preventDefault();
     event.stopPropagation();
     clearEventGesture();
-  },[clearEventGesture]);
+  },[clearEventGesture,saving]);
   useEffect(()=>{
     window.addEventListener("pointermove",eventGesturePointerMove,true);
     window.addEventListener("pointerup",finishEventGesture,true);

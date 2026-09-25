@@ -178,6 +178,8 @@ test("월간 이벤트 포인터 취소와 잘못된 놓기는 저장 없이 제
   assert.ok(/window\.addEventListener\("pointermove",[^;]+,true\)/.test(page));
   assert.ok(/suppressEventClick\.current=true[\s\S]{0,180}setTimeout\(\(\)=>\{suppressEventClick\.current=false[\s\S]{0,80},0\)/.test(page));
   assert.ok(!/onPointerUp=\{[^}]*saveEvent|onPointerUp=\{[^}]*fetch\(/.test(page));
+  assert.match(page, /const cancelEventGesture=useCallback\(\(event:PointerEvent\)=>\{[\s\S]{0,160}if\(saving\|\|!active/);
+  assert.match(page, /const cancelEventGestureOnEscape=useCallback\(\(event:KeyboardEvent\)=>\{[\s\S]{0,170}if\(saving\|\|!active\)return/);
 });
 
 test("월간 일정 드래그는 유효한 완료만 저장하고 성공 뒤 새 일정을 불러온다", async () => {
