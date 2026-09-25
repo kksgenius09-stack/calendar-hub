@@ -72,8 +72,10 @@ export function resizeEventToDate(
 ): EventDateDraft | null {
   const draft = currentDraft(event);
   if (!draft) return null;
-  if (edge === "start") {
-    return targetDate > draft.endDate ? null : { ...draft, startDate: targetDate };
-  }
-  return targetDate < draft.startDate ? null : { ...draft, endDate: targetDate };
+  const resized = edge === "start"
+    ? { ...draft, startDate: targetDate }
+    : { ...draft, endDate: targetDate };
+  if (resized.startDate > resized.endDate) return null;
+  if (!resized.allDay && resized.startDate === resized.endDate && resized.startTime >= resized.endTime) return null;
+  return resized;
 }

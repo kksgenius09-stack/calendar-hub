@@ -82,6 +82,20 @@ test("시간 일정 기간 조절은 원래 현지 시각을 변경하지 않는
   });
 });
 
+test("시간 일정의 종료일을 시작일로 당겨 시각이 역전되면 거부한다", () => {
+  const event = {
+    source: "google", start: "2026-09-10T17:00:00+09:00", end: "2026-09-11T09:00:00+09:00", allDay: false,
+  };
+  assert.equal(manipulation.resizeEventToDate(event, "end", "2026-09-10"), null);
+});
+
+test("시간 일정의 시작일을 종료일로 밀어 시각이 역전되면 거부한다", () => {
+  const event = {
+    source: "google", start: "2026-09-10T17:00:00+09:00", end: "2026-09-11T09:00:00+09:00", allDay: false,
+  };
+  assert.equal(manipulation.resizeEventToDate(event, "start", "2026-09-11"), null);
+});
+
 test("금지된 일정이나 시작일 없는 일정은 날짜 초안을 만들지 않는다", () => {
   assert.equal(manipulation.moveEventToDate({
     source: "google", start: "2026-09-10", recurrence: "FREQ=WEEKLY", allDay: true,
