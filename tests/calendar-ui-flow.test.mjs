@@ -169,7 +169,7 @@ test("월간 일정 바는 이동과 실제 양 끝 조절을 따로 시작한�
 });
 
 test("월간 일정 조작 상태와 양 끝 핸들은 시각적 스타일을 갖는다", async () => {
-  const css = await read("app/globals.css");
+  const [css, page] = await Promise.all([read("app/globals.css"), read("app/page.tsx")]);
   for (const selector of [
     ".month-event-bar.draggable",
     ".event-resize-handle.start",
@@ -180,6 +180,12 @@ test("월간 일정 조작 상태와 양 끝 핸들은 시각적 스타일을 �
   ]) {
     assert.ok(css.includes(selector), `missing style selector ${selector}`);
   }
+  assert.match(page, /manipulation\.allowed\?"draggable":"manipulation-blocked"/);
+  assert.match(page, /saving&&isActiveGesture\?"saving"/);
+  assert.match(page, /event-resize-handle resize-start start/);
+  assert.match(page, /event-resize-handle resize-end end/);
+  assert.match(css, /@media\s*\(min-width:\s*901px\)[\s\S]*?\.month-event-bar\.draggable\s*\{\s*cursor:\s*grab/);
+  assert.match(css, /@media\s*\(max-width:\s*900px\)[\s\S]*?\.event-resize-handle, \.month-event-resize-handle\s*\{\s*display:\s*none/);
 });
 
 test("월간 이벤트 포인터 취소와 잘못된 놓기는 저장 없이 제스처만 종료한다", async () => {
