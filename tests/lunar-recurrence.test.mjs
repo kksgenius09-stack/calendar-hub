@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import KoreanLunarCalendar from "korean-lunar-calendar";
+import { readFile } from "node:fs/promises";
 
 function toDateString({ year, month, day }) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -73,4 +74,13 @@ test("윤달은 평달과 구분되고 각각 왕복 변환된다", () => {
   assert.notEqual(toDateString(leapCase.leap), toDateString(leapCase.regular));
   assertLunarRoundTrip(leapCase.year, leapCase.month, 1, false);
   assertLunarRoundTrip(leapCase.year, leapCase.month, 1, true);
+});
+
+test("음력 반복 API는 선택한 회차 조회와 한 건·전체 삭제를 지원한다", async () => {
+  const route = await readFile(new URL("../app/api/lunar/series/route.ts", import.meta.url), "utf8");
+  assert.match(route, /export async function GET/);
+  assert.match(route, /export async function DELETE/);
+  assert.match(route, /lunar_event_instances/);
+  assert.match(route, /lunar_recurring_events/);
+  assert.match(route, /scope/);
 });
