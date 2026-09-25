@@ -370,6 +370,18 @@ button { color: inherit; }
 .search-more { width: 100%; height: 40px; border: 0; background: #f7f6ff; color: var(--accent); font-size: 10px; font-weight: 700; cursor: pointer; }
 @keyframes search-spin { to { transform: rotate(360deg); } }
 
+.connection-error { display: grid; gap: 7px; padding: 13px 14px; border: 1px solid #e7caca; border-radius: 10px; background: #fff8f7; color: #493b3a; }
+.connection-error-title { font-size: 12px; font-weight: 750; }
+.connection-error-message, .connection-error-action { margin: 0; color: #766866; font-size: 10px; line-height: 1.55; }
+.connection-error-retry, .connection-error-copy { min-height: 32px; padding: 0 11px; border: 1px solid #d9d0cf; border-radius: 7px; background: #fff; color: #514744; font-size: 10px; font-weight: 650; cursor: pointer; }
+.connection-error-retry { justify-self: start; margin-top: 2px; }
+.connection-error-retry:disabled { color: #99918f; cursor: wait; }
+.connection-error-details { padding-top: 7px; border-top: 1px solid #eadedc; color: #817572; font-size: 9px; }
+.connection-error-details summary { width: fit-content; cursor: pointer; }
+.connection-error-details pre { overflow-x: auto; margin: 9px 0; color: #716966; font: 10px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.connection-error-copy { min-height: 27px; font-size: 9px; }
+.connection-error-copy-status { margin-left: 8px; color: #817572; font-size: 9px; }
+
 /* Calm calendar theme */
 .topbar { height: 68px; gap: 26px; padding: 0 24px; background: var(--surface); }
 .brand { min-width: 190px; font-size: 18px; font-weight: 650; letter-spacing: -.5px; }
