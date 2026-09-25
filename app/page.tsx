@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 import KoreanLunarCalendar from "korean-lunar-calendar";
 import { getSupabaseBrowserClient } from "@/app/lib/supabase/client";
 import { connectionAction, connectionRedirectPath, defaultCalendarState, eventOccursOnDate, inclusiveEventEndDate, monthEventSegments, moveCursorToMonth, moveCursorToYear, orderedDateRange, surroundingYears } from "@/app/lib/calendar-ui";
-import { eventManipulationState, isDragGesture, moveEventToDate, resizeEventToDate, type EventDateDraft } from "@/app/lib/event-manipulation";
+import { eventManipulationState, isDragGesture, moveEventToDate, persistCompletedEventGesture, resizeEventToDate, type EventDateDraft } from "@/app/lib/event-manipulation";
 import { expandSearchYears, normalizeExpandedSources, searchCalendarEvents } from "@/app/lib/calendar-search";
 import { LegalLinks } from "@/app/components/legal-links";
 
@@ -172,23 +172,9 @@ export default function Home() {
       setEditorOpen(false);setNotice(editing?"일정을 수정했어요.":"새 일정을 저장했어요.");await loadEvents();
     } catch(e){setNotice(e instanceof Error?e.message:"저장에 실패했어요.");} finally {setSaving(false);}
   };
-  const saveDraggedEvent = useCallback(async (event:EventItem, draft:EventDateDraft, mode:EventDragState["mode"]) => {
-    if (!eventManipulationState(event).allowed) return;
-    const start = draft.allDay ? draft.startDate : new Date(`${draft.startDate}T${draft.startTime}`).toISOString();
-    const end = draft.allDay ? dateKey(addDays(new Date(`${draft.endDate}T00:00:00`), 1)) : new Date(`${draft.endDate}T${draft.endTime}`).toISOString();
-    const body = { calendarId:event.calendarId, title:event.title, start, end, allDay:draft.allDay, recurrence:event.recurrence||"", providerEventId:event.providerEventId, resourceUrl:event.resourceUrl };
-    setSaving(true);
-    try {
-      const response = await fetch(sourcePath[event.source], { method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify(body) });
-      if (!response.ok) throw new Error("일정 저장 실패");
-      await loadEvents();
-      setNotice(mode==="move"?"일정을 이동했어요.":"기간을 변경했어요.");
-    } catch {
-      setNotice("일정을 변경하지 못했어요. 원래 일정은 그대로 유지됩니다.");
-    } finally {
-      setSaving(false);
-    }
-  }, [loadEvents]);
+  const saveDraggedEvent = useCallback((event:EventItem, mode:EventDragState["mode"], targetDate:string|null, gesture:{dragging:boolean;cancelled?:boolean}, onDraft:(draft:EventDateDraft)=>void) => persistCompletedEventGesture(event,mode,targetDate,gesture,{
+    sourcePath, fetcher:(url,options)=>fetch(url,options), loadEvents, setSaving, onDraft, setNotice,
+  }), [loadEvents]);
   const deleteExternalEvent = async (event:EventItem,scope:"single"|"all") => {
     if(scope==="single"&&event.recurrence&&event.source!=="google") return fetch(sourcePath[event.source],{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...event,exclusionDate:event.start})});
     return fetch(sourcePath[event.source],{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({...event,scope})});
@@ -257,7 +243,7 @@ function ICloudPasswordGuide() {
 
 function MiniCalendar({ cursor, onSelect }: { cursor: Date; onSelect: (d: Date) => void }) { const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const start = addDays(first, -first.getDay()); const cells = Array.from({length:42},(_,i)=>addDays(start,i)); const today = dateKey(new Date()); return <section className="mini-calendar"><div className="mini-title"><b>{cursor.getFullYear()}년 {cursor.getMonth()+1}월</b></div><div className="mini-grid mini-week">{weekdays.map((d,i)=><span key={d} className={i===0?"sunday":i===6?"saturday":""}>{d}</span>)}</div><div className="mini-grid">{cells.map(d=><button key={dateKey(d)} onClick={()=>onSelect(d)} className={`${d.getMonth()!==cursor.getMonth()?"muted":""} ${dateKey(d)===today?"selected":""} ${d.getDay()===0||holidayLabel(d)?"sunday":d.getDay()===6?"saturday":""}`}>{d.getDate()}</button>)}</div></section>; }
 
-function CalendarView({ view, cursor, range, events, loading, showLunar, saving, saveDraggedEvent, onCreate, onCreateRange, onEdit, onShowMore }: { view: View; cursor: Date; range:{start:Date;end:Date}; events:EventItem[]; loading:boolean; showLunar:boolean; saving:boolean; saveDraggedEvent:(event:EventItem,draft:EventDateDraft,mode:EventDragState["mode"])=>Promise<void>; onCreate:(d:Date)=>void; onCreateRange:(start:Date,end:Date)=>void; onEdit:(e:EventItem)=>void; onShowMore:(d:Date,anchor:DOMRect)=>void }) {
+function CalendarView({ view, cursor, range, events, loading, showLunar, saving, saveDraggedEvent, onCreate, onCreateRange, onEdit, onShowMore }: { view: View; cursor: Date; range:{start:Date;end:Date}; events:EventItem[]; loading:boolean; showLunar:boolean; saving:boolean; saveDraggedEvent:(event:EventItem,mode:EventDragState["mode"],targetDate:string|null,gesture:{dragging:boolean;cancelled?:boolean},onDraft:(draft:EventDateDraft)=>void)=>Promise<boolean>; onCreate:(d:Date)=>void; onCreateRange:(start:Date,end:Date)=>void; onEdit:(e:EventItem)=>void; onShowMore:(d:Date,anchor:DOMRect)=>void }) {
   const [dragRange,setDragRange]=useState<{start:string;end:string}|null>(null);
   const [eventDrag,setEventDrag]=useState<EventDragState|null>(null);
   const eventDragRef=useRef<EventDragState|null>(null);
@@ -307,11 +293,8 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
     suppressClickOnce();
     const targetDate=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>("[data-date]")?.dataset.date;
     if(!targetDate){clearEventGesture();return;}
-    clearEventGesture();
-    const draft=active.mode==="move"?moveEventToDate(active.event,targetDate):resizeEventToDate(active.event,active.mode==="resize-start"?"start":"end",targetDate);
-    if(!draft)return;
-    void saveDraggedEvent(active.event,draft,active.mode);
-  },[clearEventGesture,saveDraggedEvent,suppressClickOnce]);
+    void saveDraggedEvent(active.event,active.mode,targetDate,{dragging:active.dragging},()=>setEventGesture({...active,targetDate,dragging:true})).then(()=>clearEventGesture());
+  },[clearEventGesture,saveDraggedEvent,setEventGesture,suppressClickOnce]);
   const cancelEventGesture=useCallback((event:PointerEvent)=>{
     const active=eventDragRef.current;
     if(!active||event.pointerId!==active.pointerId)return;

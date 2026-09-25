@@ -110,3 +110,85 @@ test("금지된 일정이나 시작일 없는 일정은 날짜 초안을 만들�
   }, "end", "2026-09-15"), null);
   assert.equal(manipulation.moveEventToDate({ source: "icloud" }, "2026-09-15"), null);
 });
+
+test("유효한 완료 제스처는 미리보기를 유지한 채 정확히 한 번 PATCH하고 성공 뒤 다시 불러온다", async () => {
+  assert.equal(typeof manipulation.persistCompletedEventGesture, "function");
+  const event = {
+    source: "google", calendarId: "primary", providerEventId: "provider-42", resourceUrl: "https://calendar.test/event/42",
+    title: "여행", recurrence: "", start: "2026-09-22", end: "2026-09-25", allDay: true,
+  };
+  const events = [event];
+  const order = [];
+  const requests = [];
+  const saved = await manipulation.persistCompletedEventGesture(event, "move", "2026-10-02", { dragging: true }, {
+    sourcePath: { google: "/api/google/events", icloud: "/api/icloud/events", daou: "/api/caldav/events" },
+    fetcher: async (url, options) => { requests.push({ url, options }); order.push("PATCH"); return { ok: true }; },
+    loadEvents: async () => { order.push("reload"); },
+    setSaving: saving => order.push(saving ? "saving" : "idle"),
+    onDraft: draft => { order.push("preview"); assert.deepEqual(draft, { startDate:"2026-10-02", endDate:"2026-10-04", startTime:"00:00", endTime:"00:00", allDay:true }); },
+    setNotice: message => { order.push(message); },
+  });
+
+  assert.equal(saved, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "/api/google/events");
+  assert.equal(requests[0].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    calendarId: "primary", title: "여행", start: "2026-10-02", end: "2026-10-05", allDay: true,
+    recurrence: "", providerEventId: "provider-42", resourceUrl: "https://calendar.test/event/42",
+  });
+  assert.deepEqual(order, ["preview", "saving", "PATCH", "reload", "일정을 이동했어요.", "idle"]);
+  assert.equal(events[0], event);
+});
+
+test("취소되거나 유효하지 않은 release는 PATCH하지 않는다", async () => {
+  assert.equal(typeof manipulation.persistCompletedEventGesture, "function");
+  let patchCount = 0;
+  const options = {
+    sourcePath: { google: "/api/google/events", icloud: "/api/icloud/events", daou: "/api/caldav/events" },
+    fetcher: async () => { patchCount++; return { ok: true }; }, loadEvents: async () => {},
+    setSaving: () => {}, onDraft: () => {}, setNotice: () => {},
+  };
+  const event = { source:"google", calendarId:"primary", providerEventId:"event-1", title:"일정", start:"2026-09-22", allDay:true };
+  assert.equal(await manipulation.persistCompletedEventGesture(event, "move", "2026-09-25", { dragging:true, cancelled:true }, options), false);
+  assert.equal(await manipulation.persistCompletedEventGesture(event, "move", null, { dragging:true }, options), false);
+  assert.equal(await manipulation.persistCompletedEventGesture(event, "move", "2026-09-25", { dragging:false }, options), false);
+  assert.equal(await manipulation.persistCompletedEventGesture(event, "resize-start", "2026-09-30", { dragging:true }, options), false);
+  assert.equal(await manipulation.persistCompletedEventGesture({ ...event, source:"daou", calendarName:"전사일정" }, "move", "2026-09-25", { dragging:true }, options), false);
+  assert.equal(patchCount, 0);
+});
+
+test("resize 성공은 기간 변경 안내를 따로 표시한다", async () => {
+  assert.equal(typeof manipulation.persistCompletedEventGesture, "function");
+  const notices = [];
+  const event = { source:"icloud", calendarId:"home", providerEventId:"uid-1", resourceUrl:"/event/1.ics", title:"약속", start:"2026-09-22", end:"2026-09-23", allDay:true };
+  const saved = await manipulation.persistCompletedEventGesture(event, "resize-end", "2026-09-25", { dragging:true }, {
+    sourcePath: { google: "/api/google/events", icloud: "/api/icloud/events", daou: "/api/caldav/events" },
+    fetcher: async () => ({ ok:true }), loadEvents: async () => {}, setSaving: () => {}, onDraft: () => {},
+    setNotice: message => notices.push(message),
+  });
+  assert.equal(saved, true);
+  assert.deepEqual(notices, ["기간을 변경했어요."]);
+});
+
+test("PATCH 실패 시 미리보기와 저장 중 상태를 끝내고 원본 일정을 유지한다", async () => {
+  assert.equal(typeof manipulation.persistCompletedEventGesture, "function");
+  const event = { source:"icloud", calendarId:"home", providerEventId:"uid-1", resourceUrl:"/event/1.ics", title:"약속", start:"2026-09-22", end:"2026-09-23", allDay:true };
+  const events = [event];
+  const order = [];
+  let reloadCount = 0;
+  const saved = await manipulation.persistCompletedEventGesture(event, "resize-end", "2026-09-25", { dragging:true }, {
+    sourcePath: { google: "/api/google/events", icloud: "/api/icloud/events", daou: "/api/caldav/events" },
+    fetcher: async () => { order.push("PATCH"); return { ok:false }; },
+    loadEvents: async () => { reloadCount++; },
+    setSaving: saving => order.push(saving ? "saving" : "idle"),
+    onDraft: () => order.push("preview"),
+    setNotice: message => order.push(message),
+  });
+
+  assert.equal(saved, false);
+  assert.deepEqual(order, ["preview", "saving", "PATCH", "일정을 변경하지 못했어요. 원래 일정은 그대로 유지됩니다.", "idle"]);
+  assert.equal(reloadCount, 0);
+  assert.equal(events[0], event);
+  assert.deepEqual(event, { source:"icloud", calendarId:"home", providerEventId:"uid-1", resourceUrl:"/event/1.ics", title:"약속", start:"2026-09-22", end:"2026-09-23", allDay:true });
+});
