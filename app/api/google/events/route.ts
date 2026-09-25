@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
     const list = await listResponse.json() as { items?: GoogleCalendar[] };
     const calendars = list.items ?? [];
     const params = new URLSearchParams({ timeMin: from, timeMax: to, singleEvents: "true", orderBy: "startTime", maxResults: "500" });
-    const groups = await Promise.all(calendars.map(async calendar => {
+    const eventCalendars = calendars.filter(calendar => calendar.selected !== false || calendar.primary);
+    const groups = await Promise.all(eventCalendars.map(async calendar => {
       const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`, { headers: auth.headers });
       if (!response.ok) return [];
       const data = await response.json() as { items?: GoogleEvent[] };
