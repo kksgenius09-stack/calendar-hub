@@ -172,6 +172,23 @@ export default function Home() {
       setEditorOpen(false);setNotice(editing?"일정을 수정했어요.":"새 일정을 저장했어요.");await loadEvents();
     } catch(e){setNotice(e instanceof Error?e.message:"저장에 실패했어요.");} finally {setSaving(false);}
   };
+  const saveDraggedEvent = useCallback(async (event:EventItem, draft:EventDateDraft, mode:EventDragState["mode"]) => {
+    if (!eventManipulationState(event).allowed) return;
+    const start = draft.allDay ? draft.startDate : new Date(`${draft.startDate}T${draft.startTime}`).toISOString();
+    const end = draft.allDay ? dateKey(addDays(new Date(`${draft.endDate}T00:00:00`), 1)) : new Date(`${draft.endDate}T${draft.endTime}`).toISOString();
+    const body = { calendarId:event.calendarId, title:event.title, start, end, allDay:draft.allDay, recurrence:event.recurrence||"", providerEventId:event.providerEventId, resourceUrl:event.resourceUrl };
+    setSaving(true);
+    try {
+      const response = await fetch(sourcePath[event.source], { method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify(body) });
+      if (!response.ok) throw new Error("일정 저장 실패");
+      await loadEvents();
+      setNotice(mode==="move"?"일정을 이동했어요.":"기간을 변경했어요.");
+    } catch {
+      setNotice("일정을 변경하지 못했어요. 원래 일정은 그대로 유지됩니다.");
+    } finally {
+      setSaving(false);
+    }
+  }, [loadEvents]);
   const deleteExternalEvent = async (event:EventItem,scope:"single"|"all") => {
     if(scope==="single"&&event.recurrence&&event.source!=="google") return fetch(sourcePath[event.source],{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...event,exclusionDate:event.start})});
     return fetch(sourcePath[event.source],{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({...event,scope})});
@@ -213,7 +230,7 @@ export default function Home() {
         <div className={`sync-card ${userEmail?"":"guest"}`}><span className="sync-icon">⇅</span><div><b>{!userEmail?"둘러보기 중":loading ? "동기화 중" : "모두 동기화됨"}</b><small>{!userEmail?"연결하면 내 일정이 표시돼요":loading ? "일정을 불러오고 있어요" : "최신 일정 표시 중"}</small></div><span className="status-dot"/></div><p className="privacy-note">{userEmail?"연결된 캘린더에 직접 저장됩니다.":"로그인 없이 달력을 자유롭게 둘러보세요."}</p><LegalLinks compact/>
       </aside>
       <section className="calendar-area"><div className="quick-add"><span className="spark">✦</span><input value={quickInput} onChange={e => setQuickInput(e.target.value)} onKeyDown={e => e.key === "Enter" && quickAdd()} placeholder="일정 제목을 입력하고 날짜·시간을 선택하세요"/><span className="shortcut">Enter</span><button onClick={quickAdd}>일정 추가</button></div>
-        <CalendarView key={view} view={view} cursor={cursor} range={visibleRange} events={filtered} loading={loading} showLunar={showLunar} onCreate={openCreate} onCreateRange={openCreateRange} onEdit={openEdit} onShowMore={(date,anchor)=>setOverflowPopup({date,left:Math.max(10,Math.min(anchor.left,window.innerWidth-330)),top:Math.max(10,Math.min(anchor.bottom+5,window.innerHeight-380))})}/>
+        <CalendarView key={view} view={view} cursor={cursor} range={visibleRange} events={filtered} loading={loading} showLunar={showLunar} saving={saving} saveDraggedEvent={saveDraggedEvent} onCreate={openCreate} onCreateRange={openCreateRange} onEdit={openEdit} onShowMore={(date,anchor)=>setOverflowPopup({date,left:Math.max(10,Math.min(anchor.left,window.innerWidth-330)),top:Math.max(10,Math.min(anchor.bottom+5,window.innerHeight-380))})}/>
       </section>
     </div>
     {editorOpen && <EventEditor form={form} setForm={setForm} calendars={calendars} editing={editing} saving={saving} onClose={() => setEditorOpen(false)} onSave={saveEvent} onDelete={deleteEvent}/>} 
@@ -240,7 +257,7 @@ function ICloudPasswordGuide() {
 
 function MiniCalendar({ cursor, onSelect }: { cursor: Date; onSelect: (d: Date) => void }) { const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1); const start = addDays(first, -first.getDay()); const cells = Array.from({length:42},(_,i)=>addDays(start,i)); const today = dateKey(new Date()); return <section className="mini-calendar"><div className="mini-title"><b>{cursor.getFullYear()}년 {cursor.getMonth()+1}월</b></div><div className="mini-grid mini-week">{weekdays.map((d,i)=><span key={d} className={i===0?"sunday":i===6?"saturday":""}>{d}</span>)}</div><div className="mini-grid">{cells.map(d=><button key={dateKey(d)} onClick={()=>onSelect(d)} className={`${d.getMonth()!==cursor.getMonth()?"muted":""} ${dateKey(d)===today?"selected":""} ${d.getDay()===0||holidayLabel(d)?"sunday":d.getDay()===6?"saturday":""}`}>{d.getDate()}</button>)}</div></section>; }
 
-function CalendarView({ view, cursor, range, events, loading, showLunar, onCreate, onCreateRange, onEdit, onShowMore }: { view: View; cursor: Date; range:{start:Date;end:Date}; events:EventItem[]; loading:boolean; showLunar:boolean; onCreate:(d:Date)=>void; onCreateRange:(start:Date,end:Date)=>void; onEdit:(e:EventItem)=>void; onShowMore:(d:Date,anchor:DOMRect)=>void }) {
+function CalendarView({ view, cursor, range, events, loading, showLunar, saving, saveDraggedEvent, onCreate, onCreateRange, onEdit, onShowMore }: { view: View; cursor: Date; range:{start:Date;end:Date}; events:EventItem[]; loading:boolean; showLunar:boolean; saving:boolean; saveDraggedEvent:(event:EventItem,draft:EventDateDraft,mode:EventDragState["mode"])=>Promise<void>; onCreate:(d:Date)=>void; onCreateRange:(start:Date,end:Date)=>void; onEdit:(e:EventItem)=>void; onShowMore:(d:Date,anchor:DOMRect)=>void }) {
   const [dragRange,setDragRange]=useState<{start:string;end:string}|null>(null);
   const [eventDrag,setEventDrag]=useState<EventDragState|null>(null);
   const eventDragRef=useRef<EventDragState|null>(null);
@@ -257,7 +274,7 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, onCreat
   },[]);
   const startEventGesture=(item:EventItem, event:React.PointerEvent<HTMLButtonElement|HTMLSpanElement>, mode:EventDragState["mode"])=>{
     event.stopPropagation();
-    if(event.pointerType!=="mouse"||event.button!==0||!eventManipulationState(item).allowed)return;
+    if(saving||event.pointerType!=="mouse"||event.button!==0||!eventManipulationState(item).allowed)return;
     event.preventDefault();
     suppressEventClick.current=false;
     cancelledPointerId.current=null;
@@ -290,9 +307,11 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, onCreat
     suppressClickOnce();
     const targetDate=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>("[data-date]")?.dataset.date;
     if(!targetDate){clearEventGesture();return;}
-    updateEventTarget(targetDate);
     clearEventGesture();
-  },[clearEventGesture,suppressClickOnce,updateEventTarget]);
+    const draft=active.mode==="move"?moveEventToDate(active.event,targetDate):resizeEventToDate(active.event,active.mode==="resize-start"?"start":"end",targetDate);
+    if(!draft)return;
+    void saveDraggedEvent(active.event,draft,active.mode);
+  },[clearEventGesture,saveDraggedEvent,suppressClickOnce]);
   const cancelEventGesture=useCallback((event:PointerEvent)=>{
     const active=eventDragRef.current;
     if(!active||event.pointerId!==active.pointerId)return;

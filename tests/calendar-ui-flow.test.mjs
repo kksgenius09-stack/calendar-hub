@@ -179,3 +179,17 @@ test("월간 이벤트 포인터 취소와 잘못된 놓기는 저장 없이 제
   assert.ok(/suppressEventClick\.current=true[\s\S]{0,180}setTimeout\(\(\)=>\{suppressEventClick\.current=false[\s\S]{0,80},0\)/.test(page));
   assert.ok(!/onPointerUp=\{[^}]*saveEvent|onPointerUp=\{[^}]*fetch\(/.test(page));
 });
+
+test("월간 일정 드래그는 유효한 완료만 저장하고 성공 뒤 새 일정을 불러온다", async () => {
+  const page = await read("app/page.tsx");
+  for (const phrase of [
+    'method:"PATCH"', "일정을 이동했어요.", "기간을 변경했어요.", "일정을 변경하지 못했어요.",
+  ]) assert.match(page, new RegExp(phrase.replaceAll(".", "\\.")));
+  assert.match(page, /providerEventId\s*:\s*event\.providerEventId/);
+  assert.match(page, /resourceUrl\s*:\s*event\.resourceUrl/);
+  assert.match(page, /saveDraggedEvent\(active\.event,\s*draft,\s*active\.mode\)/);
+  assert.match(page, /clearEventGesture\(\);\s*const draft=[\s\S]{0,280}if\(!draft\)return;/);
+  assert.match(page, /await loadEvents\(\)/);
+  assert.match(page, /const end = draft\.allDay \? dateKey\(addDays\(new Date\(`\$\{draft\.endDate\}T00:00:00`\), 1\)\)/);
+  assert.match(page, /recurrence:event\.recurrence\s*\|\|\s*""/);
+});
