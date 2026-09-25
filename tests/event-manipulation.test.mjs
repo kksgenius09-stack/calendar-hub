@@ -192,3 +192,12 @@ test("PATCH 실패 시 미리보기와 저장 중 상태를 끝내고 원본 일
   assert.equal(events[0], event);
   assert.deepEqual(event, { source:"icloud", calendarId:"home", providerEventId:"uid-1", resourceUrl:"/event/1.ics", title:"약속", start:"2026-09-22", end:"2026-09-23", allDay:true });
 });
+
+test("저장 중인 제스처 미리보기는 포인터와 날짜 호버 업데이트로부터 고정된다", () => {
+  assert.equal(typeof manipulation.updateEventGesture, "function");
+  const submitted = { targetDate:"2026-10-02", dragging:true, eventId:"event-1" };
+  assert.equal(manipulation.updateEventGesture(submitted, "2026-10-05", true), submitted);
+  assert.deepEqual(manipulation.updateEventGesture(submitted, "2026-10-05", false), {
+    targetDate:"2026-10-05", dragging:true, eventId:"event-1",
+  });
+});

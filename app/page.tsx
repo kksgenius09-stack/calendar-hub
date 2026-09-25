@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 import KoreanLunarCalendar from "korean-lunar-calendar";
 import { getSupabaseBrowserClient } from "@/app/lib/supabase/client";
 import { connectionAction, connectionRedirectPath, defaultCalendarState, eventOccursOnDate, inclusiveEventEndDate, monthEventSegments, moveCursorToMonth, moveCursorToYear, orderedDateRange, surroundingYears } from "@/app/lib/calendar-ui";
-import { eventManipulationState, isDragGesture, moveEventToDate, persistCompletedEventGesture, resizeEventToDate, type EventDateDraft } from "@/app/lib/event-manipulation";
+import { eventManipulationState, isDragGesture, moveEventToDate, persistCompletedEventGesture, resizeEventToDate, updateEventGesture, type EventDateDraft } from "@/app/lib/event-manipulation";
 import { expandSearchYears, normalizeExpandedSources, searchCalendarEvents } from "@/app/lib/calendar-search";
 import { LegalLinks } from "@/app/components/legal-links";
 
@@ -270,8 +270,8 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
   };
   const updateEventTarget=useCallback((targetDate:string)=>{
     const current=eventDragRef.current;
-    if(current)setEventGesture({...current,targetDate});
-  },[setEventGesture]);
+    if(current)setEventGesture(updateEventGesture(current,targetDate,saving));
+  },[saving,setEventGesture]);
   const eventGesturePointerMove=useCallback((event:PointerEvent)=>{
     const current=eventDragRef.current;
     if(!current||event.pointerId!==current.pointerId)return;
@@ -279,8 +279,8 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
     if(!dragging)return;
     const hit=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>("[data-date]");
     const targetDate=hit?.dataset.date;
-    setEventGesture({...current,dragging:true,targetDate:targetDate||current.targetDate});
-  },[setEventGesture]);
+    setEventGesture(updateEventGesture(current,targetDate||current.targetDate,saving,true));
+  },[saving,setEventGesture]);
   const finishEventGesture=useCallback((event:PointerEvent)=>{
     const active=eventDragRef.current;
     if(!active){

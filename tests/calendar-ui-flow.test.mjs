@@ -187,6 +187,9 @@ test("월간 일정 드래그는 유효한 완료만 저장하고 성공 뒤 새
   assert.match(page, /persistCompletedEventGesture/);
   assert.match(page, /saveDraggedEvent\(active\.event,active\.mode,targetDate,\{dragging:active\.dragging\}/);
   assert.match(page, /\)\.then\(\(\)=>clearEventGesture\(\)\)/);
+  assert.ok((page.match(/updateEventGesture\(/g) || []).length >= 2);
+  assert.match(page, /updateEventGesture\(current,targetDate,saving\)/);
+  assert.match(page, /updateEventGesture\(current,targetDate\|\|current\.targetDate,saving,true\)/);
   assert.match(persistence, /await options\.loadEvents\(\)/);
   assert.match(persistence, /method: "PATCH"/);
 });

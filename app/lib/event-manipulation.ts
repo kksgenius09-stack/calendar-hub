@@ -39,6 +39,16 @@ export function isDragGesture(start: { x: number; y: number }, current: { x: num
   return Math.hypot(current.x - start.x, current.y - start.y) >= threshold;
 }
 
+export function updateEventGesture<T extends { targetDate: string; dragging: boolean }>(
+  current: T,
+  targetDate: string,
+  saving: boolean,
+  dragging = current.dragging,
+): T {
+  if (saving) return current;
+  return { ...current, targetDate, dragging };
+}
+
 const pad = (value: number) => String(value).padStart(2, "0");
 const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 const timeKey = (date: Date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
