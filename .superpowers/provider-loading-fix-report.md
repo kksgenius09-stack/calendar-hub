@@ -19,3 +19,9 @@ The page loader treated thrown fetch/JSON errors as a disconnected provider with
 - Build still emits existing Vinext/Cloudflare compatibility notices for Node built-ins and route classification; the build exits successfully.
 
 No deployment performed.
+
+## Follow-up: transient route failures
+
+The first pass still treated any exception from provider event routes as reconnect-required. This follow-up makes the route responses distinguish explicit auth failures (`AUTH_REQUIRED`, missing/invalid stored credentials, CalDAV 401, and Google `invalid_grant`/auth-scope errors) from transient network, provider HTTP, calendar-list, or event-read failures. Explicit auth failures remain 401/`connected:false`; transient failures are 503/`connected:true` with a generic error so the loader preserves the last-known provider state. CalDAV event reads now propagate per-calendar errors instead of silently treating them as empty results.
+
+Follow-up verification: `npm run lint` passed; `npm test` passed with 90 tests; `git diff --check` passed. Build continues to emit the existing Vinext compatibility notices noted above.
