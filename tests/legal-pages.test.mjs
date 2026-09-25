@@ -33,6 +33,21 @@ test("privacy policy describes every stored credential and user right", async ()
   ]) assert.match(privacy, new RegExp(phrase));
 });
 
+test("privacy policy discloses Google user data sharing and Limited Use compliance", async () => {
+  const privacy = await read("app/privacy/page.tsx");
+  for (const phrase of [
+    "Google 사용자 데이터의 공유·전송·공개",
+    "다른 이용자",
+    "광고 사업자",
+    "Supabase",
+    "Cloudflare",
+    "법령상 의무",
+    "Google API Services User Data Policy",
+    "Limited Use",
+    "https://developers.google.com/terms/api-services-user-data-policy",
+  ]) assert.match(privacy, new RegExp(phrase.replaceAll(".", "\\.")));
+});
+
 test("terms explain connected services and user responsibilities", async () => {
   const terms = await read("app/terms/page.tsx");
   for (const phrase of [
@@ -57,6 +72,15 @@ test("public legal links appear on both entry and calendar screens", async () =>
     assert.match(links, new RegExp(`href=["']${href}["']`));
   }
   assert.ok((home.match(/<LegalLinks/g) ?? []).length >= 2);
+});
+
+test("landing screen explains the free core and possible Plus features", async () => {
+  const home = await read("app/page.tsx");
+  const css = await read("app/globals.css");
+  assert.match(home, /Google·iCloud·회사 캘린더 연결과 기본 일정 관리는 계속 무료로 제공합니다\./);
+  assert.match(home, /향후 추가되는 일부 고급 기능은 온달력 Plus로 제공될 수 있습니다\./);
+  assert.match(home, /className=["']service-plan-note["']/);
+  assert.match(css, /\.service-plan-note\s*\{[^}]*color:\s*var\(--muted\)/s);
 });
 
 test("Google verification checklist uses production URLs and exact scopes", async () => {

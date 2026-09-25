@@ -4,7 +4,7 @@ import { runtimeEnv } from "@/app/lib/runtime-env";
 import { loadConnection, saveConnection } from "@/app/lib/connection-store";
 
 type GoogleCalendar = { id: string; summary?: string; primary?: boolean; selected?: boolean; backgroundColor?: string };
-type GoogleEvent = { id: string; summary?: string; recurrence?: string[]; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string } };
+type GoogleEvent = { id: string; summary?: string; recurrence?: string[]; recurringEventId?:string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string } };
 
 async function access(request: NextRequest) {
   const sealed = (await loadConnection("google"))?.encrypted;
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`, { headers: auth.headers });
       if (!response.ok) return [];
       const data = await response.json() as { items?: GoogleEvent[] };
-      return (data.items ?? []).map(event => ({ id: `${calendar.id}:${event.id}`, providerEventId: event.id, calendarId: calendar.id, calendarName: calendar.summary || "Google 캘린더", calendarColor: calendar.backgroundColor || "#e7a938", title: event.summary || "제목 없는 일정", start: event.start?.dateTime || event.start?.date, end: event.end?.dateTime || event.end?.date, allDay: Boolean(event.start?.date), recurrence: event.recurrence?.[0]?.replace("RRULE:", "") || "" }));
+      return (data.items ?? []).map(event => ({ id: `${calendar.id}:${event.id}`, providerEventId: event.id, repeatSeriesId:event.recurringEventId, calendarId: calendar.id, calendarName: calendar.summary || "Google 캘린더", calendarColor: calendar.backgroundColor || "#e7a938", title: event.summary || "제목 없는 일정", start: event.start?.dateTime || event.start?.date, end: event.end?.dateTime || event.end?.date, allDay: Boolean(event.start?.date), recurrence: event.recurrence?.[0]?.replace("RRULE:", "") || "" }));
     }));
     return finish({ connected: true, configured, calendars: calendars.map(c => ({ id: c.id, name: c.summary || "Google 캘린더", color: c.backgroundColor || "#e7a938", primary: Boolean(c.primary), selected: c.selected !== false })), events: groups.flat() }, auth.tokens, auth.refreshed);
   } catch { return NextResponse.json({ connected: false, configured, calendars: [], events: [], error: "reconnect_required" }, { status: 401 }); }
@@ -60,5 +60,5 @@ export async function PATCH(request: NextRequest) {
   try { const auth = await access(request); const body = await request.json(); const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(body.calendarId)}/events/${encodeURIComponent(body.providerEventId)}`, { method: "PATCH", headers: auth.headers, body: JSON.stringify(googleBody(body)) }); if (!response.ok) return NextResponse.json({ error: response.status === 403 ? "google_reconnect_required" : "save_failed" }, { status: response.status }); return finish({ saved: true }, auth.tokens, auth.refreshed); } catch { return NextResponse.json({ error: "reconnect_required" }, { status: 401 }); }
 }
 export async function DELETE(request: NextRequest) {
-  try { const auth = await access(request); const body = await request.json(); const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(body.calendarId)}/events/${encodeURIComponent(body.providerEventId)}`, { method: "DELETE", headers: auth.headers }); if (!response.ok) return NextResponse.json({ error: "delete_failed" }, { status: response.status }); return finish({ deleted: true }, auth.tokens, auth.refreshed); } catch { return NextResponse.json({ error: "reconnect_required" }, { status: 401 }); }
+  try { const auth = await access(request); const body = await request.json(); const eventId=body.scope==="all"&&body.repeatSeriesId?body.repeatSeriesId:body.providerEventId; const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(body.calendarId)}/events/${encodeURIComponent(eventId)}`, { method: "DELETE", headers: auth.headers }); if (!response.ok) return NextResponse.json({ error: "delete_failed" }, { status: response.status }); return finish({ deleted: true }, auth.tokens, auth.refreshed); } catch { return NextResponse.json({ error: "reconnect_required" }, { status: 401 }); }
 }
