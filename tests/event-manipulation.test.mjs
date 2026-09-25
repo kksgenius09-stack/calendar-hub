@@ -38,6 +38,70 @@ test("시작일이 없으면 이유를 알리고 일반 일정은 허용한다",
   });
 });
 
+test("불러온 음력 회차는 공급자 ID 또는 리소스 URL로 시리즈에 연결되고 조작이 차단된다", () => {
+  const events = [
+    {
+      source: "icloud", calendarId: "home", resourceUrl: "https://icloud.test/lunar.ics",
+      title: "음력 생일", start: "2026-09-25", allDay: true,
+    },
+    {
+      source: "google", calendarId: "primary", providerEventId: "google-uid-2",
+      title: "음력 기념일", start: "2026-10-03", allDay: true,
+    },
+    {
+      source: "google", calendarId: "primary", providerEventId: "normal-uid",
+      title: "일반 일정", start: "2026-10-04", allDay: true,
+    },
+    {
+      source: "google", calendarId: "secondary", providerEventId: "uid-1",
+      title: "중복 ID 일반 일정", start: "2026-10-05", allDay: true,
+    },
+  ];
+  const instances = [
+    { series_id: "lunar-icloud", source: "icloud", calendar_id: "home", provider_event_id: "uid-1", resource_url: "https://icloud.test/lunar.ics" },
+    { series_id: "lunar-google", source: "google", calendar_id: "primary", provider_event_id: "google-uid-2", resource_url: null },
+  ];
+
+  const loaded = manipulation.attachLunarSeriesMetadata(events, instances);
+
+  assert.equal(loaded[0].repeatSeriesId, "lunar-icloud");
+  assert.equal(loaded[1].repeatSeriesId, "lunar-google");
+  assert.deepEqual(manipulation.eventManipulationState(loaded[0]), {
+    allowed: false,
+    reason: "반복 일정은 편집창에서 변경해 주세요.",
+  });
+  assert.deepEqual(manipulation.eventManipulationState(loaded[1]), {
+    allowed: false,
+    reason: "반복 일정은 편집창에서 변경해 주세요.",
+  });
+  assert.equal(loaded[2].repeatSeriesId, undefined);
+  assert.deepEqual(manipulation.eventManipulationState(loaded[2]), { allowed: true, reason: "" });
+  assert.equal(loaded[3].repeatSeriesId, undefined, "source/calendar mismatch must not mark a normal event as lunar");
+  assert.equal(loaded[2], events[2], "normal event object remains unchanged");
+});
+
+test("날짜 셀 기하 정보로 막대 오버레이 아래의 release 날짜를 찾는다", () => {
+  const cells = [
+    { date: "2026-09-24", left: 0, right: 100, top: 0, bottom: 80 },
+    { date: "2026-09-25", left: 100, right: 200, top: 0, bottom: 80 },
+  ];
+
+  assert.equal(manipulation.resolveCalendarDropDate(null, 150, 40, cells), "2026-09-25");
+  assert.equal(manipulation.resolveCalendarDropDate(null, 50, 40, cells), "2026-09-24");
+  assert.equal(manipulation.resolveCalendarDropDate("2026-09-23", 150, 40, cells), "2026-09-23");
+  assert.equal(manipulation.resolveCalendarDropDate(null, 250, 40, cells), null);
+});
+
+test("조작이 금지된 일정에는 resize handle 가장자리를 노출하지 않는다", () => {
+  const edges = { startsHere: true, endsHere: true };
+  assert.deepEqual(manipulation.eventResizeEdges({
+    source: "icloud", repeatSeriesId: "lunar-1", start: "2026-09-25", allDay: true,
+  }, edges), []);
+  assert.deepEqual(manipulation.eventResizeEdges({
+    source: "icloud", start: "2026-09-25", allDay: true,
+  }, edges), ["start", "end"]);
+});
+
 test("6픽셀 미만 이동은 클릭이고 그 이상은 드래그다", () => {
   assert.equal(manipulation.isDragGesture({ x: 10, y: 10 }, { x: 14, y: 13 }), false);
   assert.equal(manipulation.isDragGesture({ x: 10, y: 10 }, { x: 16, y: 10 }), true);

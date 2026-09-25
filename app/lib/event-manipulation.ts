@@ -17,6 +17,14 @@ export type EventDateDraft = {
   allDay: boolean;
 };
 
+export type LunarEventInstanceMetadata = {
+  series_id: string;
+  source: ManipulableEvent["source"];
+  calendar_id: string;
+  provider_event_id?: string | null;
+  resource_url?: string | null;
+};
+
 type PersistableEvent = ManipulableEvent & {
   calendarId: string;
   providerEventId?: string;
@@ -89,6 +97,48 @@ export function eventManipulationState(event: ManipulableEvent) {
   }
   if (!event.start) return { allowed: false, reason: "일정 날짜를 확인할 수 없어요." };
   return { allowed: true, reason: "" };
+}
+
+export function attachLunarSeriesMetadata<T extends {
+  source: ManipulableEvent["source"];
+  calendarId: string;
+  providerEventId?: string;
+  resourceUrl?: string;
+  repeatSeriesId?: string;
+}>(events: T[], instances: LunarEventInstanceMetadata[]): T[] {
+  const seriesByIdentity = new Map<string, string>();
+  for (const instance of instances) {
+    if (!instance.series_id || !instance.source || !instance.calendar_id) continue;
+    if (instance.provider_event_id) {
+      seriesByIdentity.set(`${instance.source}\u0000${instance.calendar_id}\u0000provider\u0000${instance.provider_event_id}`, instance.series_id);
+    }
+    if (instance.resource_url) {
+      seriesByIdentity.set(`${instance.source}\u0000${instance.calendar_id}\u0000resource\u0000${instance.resource_url}`, instance.series_id);
+    }
+  }
+
+  return events.map(event => {
+    if (event.repeatSeriesId) return event;
+    const seriesId = (event.providerEventId && seriesByIdentity.get(`${event.source}\u0000${event.calendarId}\u0000provider\u0000${event.providerEventId}`))
+      || (event.resourceUrl && seriesByIdentity.get(`${event.source}\u0000${event.calendarId}\u0000resource\u0000${event.resourceUrl}`));
+    return seriesId ? { ...event, repeatSeriesId: seriesId } : event;
+  });
+}
+
+export function resolveCalendarDropDate<T extends {
+  date: string;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}>(targetDate: string | null | undefined, clientX: number, clientY: number, cells: T[]): string | null {
+  if (targetDate) return targetDate;
+  return cells.find(cell => clientX >= cell.left && clientX < cell.right && clientY >= cell.top && clientY < cell.bottom)?.date || null;
+}
+
+export function eventResizeEdges(event: ManipulableEvent, segment: { startsHere: boolean; endsHere: boolean }): Array<"start" | "end"> {
+  if (!eventManipulationState(event).allowed) return [];
+  return [ ...(segment.startsHere ? ["start" as const] : []), ...(segment.endsHere ? ["end" as const] : []) ];
 }
 
 export function moveEventToDate(event: ManipulableEvent, targetDate: string): EventDateDraft | null {

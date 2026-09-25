@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 import KoreanLunarCalendar from "korean-lunar-calendar";
 import { getSupabaseBrowserClient } from "@/app/lib/supabase/client";
 import { connectionAction, connectionRedirectPath, defaultCalendarState, eventOccursOnDate, inclusiveEventEndDate, monthEventSegments, moveCursorToMonth, moveCursorToYear, orderedDateRange, surroundingYears } from "@/app/lib/calendar-ui";
-import { eventManipulationState, isDragGesture, moveEventToDate, persistCompletedEventGesture, resizeEventToDate, updateEventGesture, type EventDateDraft } from "@/app/lib/event-manipulation";
+import { attachLunarSeriesMetadata, eventManipulationState, eventResizeEdges, isDragGesture, moveEventToDate, persistCompletedEventGesture, resolveCalendarDropDate, resizeEventToDate, updateEventGesture, type EventDateDraft, type LunarEventInstanceMetadata } from "@/app/lib/event-manipulation";
 import { expandSearchYears, normalizeExpandedSources, searchCalendarEvents } from "@/app/lib/calendar-search";
 import { LegalLinks } from "@/app/components/legal-links";
 
@@ -117,12 +117,15 @@ export default function Home() {
     setLoading(true);
     const query = `?from=${encodeURIComponent(visibleRange.start.toISOString())}&to=${encodeURIComponent(visibleRange.end.toISOString())}`;
     const sources: Source[] = ["icloud", "google", "daou"];
-    const results = await Promise.all(sources.map(async source => { try { const response = await fetch(sourcePath[source] + query); const data = await response.json(); return { source, data }; } catch { return { source, data: { connected: false, events: [], calendars: [] } }; } }));
+    const [results, lunarSeries] = await Promise.all([
+      Promise.all(sources.map(async source => { try { const response = await fetch(sourcePath[source] + query); const data = await response.json(); return { source, data }; } catch { return { source, data: { connected: false, events: [], calendars: [] } }; } })),
+      fetch("/api/lunar/series").then(async response => response.ok ? await response.json() : { instances:[] }).catch(() => ({ instances:[] })),
+    ]);
     const nextEvents: EventItem[] = []; const nextCalendars: CalendarItem[] = []; const nextConnected = { ...connected }; const nextConfigured = { ...configured };
     let savedVisibility: Record<string, boolean> = {}; try { savedVisibility = JSON.parse(localStorage.getItem("oncal-calendar-visibility") || "{}"); } catch { savedVisibility = {}; }
     const visibility: Record<string, boolean> = {};
     for (const { source, data } of results) { nextConnected[source] = Boolean(data.connected); if (typeof data.configured === "boolean") nextConfigured[source] = data.configured; for (const c of data.calendars ?? []) { nextCalendars.push({ ...c, source }); visibility[`${source}:${c.id}`] = savedVisibility[`${source}:${c.id}`] ?? c.selected !== false; } for (const e of data.events ?? []) if (e.start) nextEvents.push({ ...e, source }); }
-    setConnected(nextConnected); setConfigured(nextConfigured); setCalendars(nextCalendars); setCalendarVisible(visibility); setEvents(nextEvents); setLoading(false);
+    setConnected(nextConnected); setConfigured(nextConfigured); setCalendars(nextCalendars); setCalendarVisible(visibility); setEvents(attachLunarSeriesMetadata(nextEvents, lunarSeries.instances as LunarEventInstanceMetadata[] || [])); setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleRangeStart, visibleRangeEnd]);
 
@@ -272,15 +275,24 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
     const current=eventDragRef.current;
     if(current)setEventGesture(updateEventGesture(current,targetDate,saving));
   },[saving,setEventGesture]);
+  const monthGridDropDate=useCallback((clientX:number,clientY:number)=>{
+    const pointTarget=document.elementFromPoint(clientX,clientY);
+    const targetDate=pointTarget?.closest<HTMLElement>(".month-grid .day-cell[data-date]")?.dataset.date;
+    const grid=pointTarget?.closest<HTMLElement>(".month-grid");
+    const cells=Array.from(grid?.querySelectorAll<HTMLElement>(".day-cell[data-date]")||[]).map(cell=>{
+      const rect=cell.getBoundingClientRect();
+      return {date:cell.dataset.date||"",left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom};
+    });
+    return resolveCalendarDropDate(targetDate,clientX,clientY,cells);
+  },[]);
   const eventGesturePointerMove=useCallback((event:PointerEvent)=>{
     const current=eventDragRef.current;
     if(!current||event.pointerId!==current.pointerId)return;
     const dragging=current.dragging||isDragGesture(current.origin,{x:event.clientX,y:event.clientY});
     if(!dragging)return;
-    const hit=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>("[data-date]");
-    const targetDate=hit?.dataset.date;
+    const targetDate=monthGridDropDate(event.clientX,event.clientY);
     setEventGesture(updateEventGesture(current,targetDate||current.targetDate,saving,true));
-  },[saving,setEventGesture]);
+  },[monthGridDropDate,saving,setEventGesture]);
   const finishEventGesture=useCallback((event:PointerEvent)=>{
     const active=eventDragRef.current;
     if(!active){
@@ -291,10 +303,10 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
     event.stopPropagation();
     if(!active.dragging){clearEventGesture();return;}
     suppressClickOnce();
-    const targetDate=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>("[data-date]")?.dataset.date;
+    const targetDate=monthGridDropDate(event.clientX,event.clientY);
     if(!targetDate){clearEventGesture();return;}
     void saveDraggedEvent(active.event,active.mode,targetDate,{dragging:active.dragging},()=>setEventGesture({...active,targetDate,dragging:true})).then(()=>clearEventGesture());
-  },[clearEventGesture,saveDraggedEvent,setEventGesture,suppressClickOnce]);
+  },[clearEventGesture,monthGridDropDate,saveDraggedEvent,setEventGesture,suppressClickOnce]);
   const cancelEventGesture=useCallback((event:PointerEvent)=>{
     const active=eventDragRef.current;
     if(saving||!active||event.pointerId!==active.pointerId)return;
@@ -342,9 +354,9 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
     const layoutEvents=layoutSource.map(event=>{const id=`${event.source}:${event.calendarId}:${event.id}`;eventByLayoutId.set(id,event);return{id,start:event.start,end:event.end,allDay:event.allDay};});
     const segments=monthEventSegments(layoutEvents,dateKey(range.start));
     return <div className="calendar-card"><div className="week-header">{weekdays.map((d,i)=><div key={d} className={i===0?"sunday":i===6?"saturday":""}>{d}</div>)}</div><div className="month-grid" onPointerLeave={()=>setDragRange(null)}>{cells.map((d,index)=>{const key=dateKey(d);const holiday=holidayLabel(d);const inDrag=Boolean(selected&&key>=selected.startDate&&key<=selected.endDate);const week=Math.floor(index/7);const column=index%7;const shown=new Set(segments.filter(segment=>segment.week===week&&column>=segment.startColumn&&column<segment.startColumn+segment.span).map(segment=>segment.id));const hidden=Math.max(0,events.filter(event=>eventOccursOnDate(event,key)).length-shown.size);return <div key={key} data-date={key} className={`day-cell ${d.getMonth()!==cursor.getMonth()?"muted":""} ${key===today?"today":""} ${holiday?"holiday":""} ${inDrag?"range-selecting":""}`} onClick={()=>{if(lastPointerType.current!=="mouse")onCreate(d);}} onPointerDown={event=>{lastPointerType.current=event.pointerType;if(eventDragRef.current)return;if(event.pointerType!=="mouse"||event.button!==0)return;event.preventDefault();setDragRange({start:key,end:key});}} onPointerEnter={()=>{updateEventTarget(key);setDragRange(current=>current?{start:current.start,end:key}:null);}} onPointerUp={event=>{if(eventDragRef.current)return;if(event.pointerType!=="mouse"||!dragRange)return;event.preventDefault();const chosen=orderedDateRange(dragRange.start,key);setDragRange(null);if(chosen.startDate===chosen.endDate)onCreate(d);else onCreateRange(new Date(`${chosen.startDate}T00:00:00`),new Date(`${chosen.endDate}T00:00:00`));}}><div className="day-label"><span className="day-number">{d.getDate()}</span>{holiday&&<span className="holiday-name">{holiday}</span>}{showLunar&&<span className="lunar-date">{lunarLabel(d)}</span>}</div>{hidden>0&&<button className="cell-more-events" onPointerDown={event=>event.stopPropagation()} onPointerUp={event=>event.stopPropagation()} onClick={event=>{event.stopPropagation();onShowMore(d,event.currentTarget.getBoundingClientRect());}}>+{hidden}개 더보기</button>}</div>})}<div className="month-events-layer">{segments.map((segment,index)=>{const event=eventByLayoutId.get(segment.id);if(!event)return null;const start=parseEventDate(event.start);const prefix=!event.allDay&&segment.startsHere?`${pad(start.getHours())}:${pad(start.getMinutes())} `:"";const style={gridColumn:`${segment.startColumn+1} / span ${segment.span}`,gridRow:segment.week+1,"--event-lane":segment.lane,...(event.calendarColor?{backgroundColor:event.calendarColor}: {})} as CSSProperties;const manipulation=eventManipulationState(event);const isActiveGesture=eventDrag?.event.id===event.id&&eventDrag.event.source===event.source&&eventDrag.event.calendarId===event.calendarId;return <button key={`${segment.id}:${segment.week}:${index}`} className={`month-event-bar ${event.source} ${segment.startsHere?"starts-here":"continues-before"} ${segment.endsHere?"ends-here":"continues-after"} ${manipulation.allowed?"draggable":"manipulation-blocked"} ${saving&&isActiveGesture?"saving":""} ${previewEvent===event?"event-drag-preview":""}`} style={style} onPointerDown={pointer=>startEventGesture(event,pointer,"move")} onClick={click=>{click.stopPropagation();if(suppressEventClick.current){suppressEventClick.current=false;if(suppressClickTimer.current!==null)window.clearTimeout(suppressClickTimer.current);suppressClickTimer.current=null;return;}onEdit(event);}} title={manipulation.allowed?event.title:manipulation.reason} aria-label={manipulation.allowed?event.title:`${event.title} · ${manipulation.reason}`}>
-      {segment.startsHere&&<span role="button" tabIndex={-1} className="month-event-resize-handle event-resize-handle resize-start start" aria-label="일정 시작일 조절" onPointerDown={pointer=>startEventGesture(event,pointer,"resize-start")}/>}
+      {eventResizeEdges(event,segment).includes("start")&&<span role="button" tabIndex={-1} className="month-event-resize-handle event-resize-handle resize-start start" aria-label="일정 시작일 조절" onPointerDown={pointer=>startEventGesture(event,pointer,"resize-start")}/>}
       <span>{prefix}{event.title}</span>
-      {segment.endsHere&&<span role="button" tabIndex={-1} className="month-event-resize-handle event-resize-handle resize-end end" aria-label="일정 종료일 조절" onPointerDown={pointer=>startEventGesture(event,pointer,"resize-end")}/>}
+      {eventResizeEdges(event,segment).includes("end")&&<span role="button" tabIndex={-1} className="month-event-resize-handle event-resize-handle resize-end end" aria-label="일정 종료일 조절" onPointerDown={pointer=>startEventGesture(event,pointer,"resize-end")}/>}
     </button>;})}</div></div></div>;
   }
   const dates = view === "week" ? Array.from({length:7},(_,i)=>addDays(range.start,i)) : [cursor]; return <div className={`calendar-card agenda-card ${view}`}><div className="agenda-columns">{dates.map(d=>{const holiday=holidayLabel(d);return <section className={`agenda-day ${dateKey(d)===today?"today":""} ${holiday?"holiday":""} ${d.getDay()===6?"saturday":""}`} key={dateKey(d)} onClick={()=>onCreate(d)}><header><b>{d.getDate()}</b><span>{weekdays[d.getDay()]}요일{holiday&&<> · <strong>{holiday}</strong></>}</span></header><EventList date={d} events={events} onEdit={onEdit} agenda/></section>})}</div>{loading&&<div className="calendar-loading">일정을 불러오는 중…</div>}</div>;

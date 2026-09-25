@@ -162,8 +162,8 @@ test("겹치는 일정은 서로 다른 줄에 배치한다", () => {
 test("월간 일정 바는 이동과 실제 양 끝 조절을 따로 시작한다", async () => {
   const page = await read("app/page.tsx");
   assert.ok(/onPointerDown=\{pointer=>startEventGesture\(event,pointer,"move"\)\}/.test(page));
-  assert.ok(/segment\.startsHere&&<span[\s\S]{0,250}resize-start/.test(page));
-  assert.ok(/segment\.endsHere&&<span[\s\S]{0,250}resize-end/.test(page));
+  assert.ok(/eventResizeEdges\(event,segment\)\.includes\("start"\)&&<span[\s\S]{0,250}resize-start/.test(page));
+  assert.ok(/eventResizeEdges\(event,segment\)\.includes\("end"\)&&<span[\s\S]{0,250}resize-end/.test(page));
   assert.ok(/eventManipulationState\(event\)/.test(page));
   assert.ok(/const startEventGesture=[\s\S]{0,350}event\.pointerType!=="mouse"/.test(page));
 });
@@ -194,12 +194,38 @@ test("월간 이벤트 포인터 취소와 잘못된 놓기는 저장 없이 제
   assert.ok(/window\.addEventListener\("pointercancel",[^;]+,true\)/.test(page));
   assert.ok(/event\.pointerId!==active\.pointerId/.test(page));
   assert.ok(/event\.key!=="Escape"[\s\S]{0,500}clearEventGesture\(\)/.test(page));
-  assert.ok(/const targetDate=document\.elementFromPoint[\s\S]{0,180}if\(!targetDate\)\{clearEventGesture\(\);return;\}/.test(page));
+  assert.ok(/const targetDate=monthGridDropDate\(event\.clientX,event\.clientY\);[\s\S]{0,120}if\(!targetDate\)\{clearEventGesture\(\);return;\}/.test(page));
   assert.ok(/window\.addEventListener\("pointermove",[^;]+,true\)/.test(page));
   assert.ok(/suppressEventClick\.current=true[\s\S]{0,180}setTimeout\(\(\)=>\{suppressEventClick\.current=false[\s\S]{0,80},0\)/.test(page));
   assert.ok(!/onPointerUp=\{[^}]*saveEvent|onPointerUp=\{[^}]*fetch\(/.test(page));
   assert.match(page, /const cancelEventGesture=useCallback\(\(event:PointerEvent\)=>\{[\s\S]{0,160}if\(saving\|\|!active/);
   assert.match(page, /const cancelEventGestureOnEscape=useCallback\(\(event:KeyboardEvent\)=>\{[\s\S]{0,170}if\(saving\|\|!active\)return/);
+});
+
+test("캘린더 로드는 음력 시리즈 인스턴스 메타데이터를 붙인 뒤 일정을 저장한다", async () => {
+  const [page, route] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/api/lunar/series/route.ts"),
+  ]);
+
+  assert.match(page, /fetch\(["']\/api\/lunar\/series["']/);
+  assert.match(page, /attachLunarSeriesMetadata\(/);
+  assert.match(route, /lunar_event_instances/);
+  assert.match(route, /provider_event_id/);
+  assert.match(route, /resource_url/);
+});
+
+test("포인터 release는 이벤트 막대 오버레이 아래 날짜 셀 좌표도 확인한다", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /resolveCalendarDropDate/);
+  assert.ok((page.match(/monthGridDropDate\(event\.clientX,event\.clientY\)/g) || []).length >= 2);
+});
+
+test("resize 가장자리는 이벤트가 조작 가능할 때만 렌더링한다", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /eventResizeEdges\(event,segment\)/);
+  assert.match(page, /eventResizeEdges\(event,segment\)\.includes\(["']start["']\)/);
+  assert.match(page, /eventResizeEdges\(event,segment\)\.includes\(["']end["']\)/);
 });
 
 test("월간 일정 드래그는 유효한 완료만 저장하고 성공 뒤 새 일정을 불러온다", async () => {
