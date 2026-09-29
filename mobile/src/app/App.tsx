@@ -1,12 +1,26 @@
 import React from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { getSession, handleAuthCallback, onSessionChange } from "../auth/session";
 
 export function App() {
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => { try { const state = await getSession(); if (mounted) setSignedIn(Boolean(state.session)); } catch { if (mounted) setSignedIn(false); } };
+    const consume = async (url: string | null) => { if (!url) return; try { await handleAuthCallback(url); } catch { /* keep signed-out state */ } finally { await refresh(); } };
+    void Linking.getInitialURL().then(consume);
+    const linkSubscription = Linking.addEventListener("url", ({ url }) => { void consume(url); });
+    const authSubscription = onSessionChange((session) => setSignedIn(Boolean(session)));
+    const appStateSubscription = AppState.addEventListener("change", (state) => { if (state === "active") void refresh(); });
+    void refresh();
+    return () => { mounted = false; linkSubscription.remove(); authSubscription.unsubscribe(); appStateSubscription.remove(); };
+  }, []);
   return <View style={styles.screen} testID="mobile-app-shell">
     <View style={styles.brandMark} accessibilityLabel="온달력"><View style={[styles.markBar, styles.markShort]} /><View style={[styles.markBar, styles.markMedium]} /><View style={[styles.markBar, styles.markTall]} /></View>
     <Text style={styles.eyebrow}>온달력</Text>
     <Text style={styles.title}>모든 일정을{`\n`}한곳에서</Text>
-    <Text style={styles.description}>캘린더를 불러오는 중이에요.</Text>
+    <Text style={styles.description}>{signedIn ? "캘린더를 불러오는 중이에요." : "안전하게 로그인하고 일정을 한곳에서 관리해요."}</Text>
     <ActivityIndicator color={COLORS.accent} accessibilityLabel="캘린더 불러오는 중" />
     <Pressable accessibilityRole="button" style={styles.navigationPlaceholder}><Text style={styles.navigationLabel}>달력 보기</Text><Text style={styles.navigationHint}>월간 · 주간 · 일간 탐색</Text></Pressable>
   </View>;

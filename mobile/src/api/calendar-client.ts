@@ -9,7 +9,7 @@ export type CalendarEvent = {
   start: string; end: string; allDay: boolean; recurrence?: string; source: Source;
 };
 export type CalendarResponse = { connected: boolean; configured?: boolean; calendars: CalendarChoice[]; events: CalendarEvent[] };
-export type EventInput = Omit<Partial<CalendarEvent>, "id" | "source"> & { source: Source; calendarId: string; title: string; start: string; end: string; allDay: boolean };
+export type EventInput = Omit<Partial<CalendarEvent>, "id" | "source"> & { source: Source; calendarId: string; title: string; start: string; end: string; allDay: boolean; idempotencyKey?: string };
 
 export class CalendarApiError extends Error {
   readonly status: number; readonly code?: string; readonly kind: "auth" | "reconnect" | "network" | "temporary" | "permission" | "unknown";
@@ -51,7 +51,7 @@ export function createCalendarClient() {
       const query = new URLSearchParams(); if (range?.from) query.set("from", range.from); if (range?.to) query.set("to", range.to);
       return request<CalendarResponse>(`${paths[source]}${query.size ? `?${query}` : ""}`);
     },
-    async create(input: EventInput) { return once(`create:${input.source}:${input.calendarId}:${input.start}:${input.end}:${input.title}`, () => request<{ saved: true; providerEventId?: string; resourceUrl?: string }>(paths[input.source], { method: "POST", body: JSON.stringify(input) })); },
+    async create(input: EventInput) { const key = input.idempotencyKey ?? `${input.source}:${input.calendarId}:${input.start}:${input.end}:${input.title}`; return once(`create:${key}`, () => request<{ saved: true; providerEventId?: string; resourceUrl?: string }>(paths[input.source], { method: "POST", body: JSON.stringify(input) })); },
     async update(input: EventInput) { return once(`update:${input.source}:${input.providerEventId ?? input.resourceUrl ?? input.calendarId}`, () => request<{ saved: true }>(paths[input.source], { method: "PATCH", body: JSON.stringify(input) })); },
     async remove(input: Pick<EventInput, "source" | "calendarId"> & { providerEventId?: string; resourceUrl?: string; repeatSeriesId?: string; scope?: "single" | "all" }) { return once(`remove:${input.source}:${input.providerEventId ?? input.resourceUrl ?? input.calendarId}:${input.scope ?? "single"}`, () => request<{ deleted: true }>(paths[input.source], { method: "DELETE", body: JSON.stringify(input) })); },
   };
