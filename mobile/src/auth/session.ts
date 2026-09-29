@@ -32,6 +32,18 @@ export async function signInWithGoogle(): Promise<{ url: string }> {
   return { url: data.url };
 }
 
+/** Exchange the one-time Supabase OAuth code received by the native deep link. */
+export async function handleAuthCallback(url: string): Promise<MobileSession> {
+  const parsed = new URL(url);
+  const error = parsed.searchParams.get("error_description") || parsed.searchParams.get("error");
+  if (error) throw new Error("Google 로그인을 완료하지 못했어요.");
+  const code = parsed.searchParams.get("code");
+  if (!code) throw new Error("로그인 callback이 올바르지 않아요.");
+  const result = await supabase.auth.exchangeCodeForSession(code);
+  if (result.error || !result.data.session) throw new Error("Google 로그인 세션을 만들지 못했어요.");
+  return { session: result.data.session, user: result.data.session.user };
+}
+
 export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
   if (error) throw new Error("로그아웃하지 못했어요.");
