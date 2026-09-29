@@ -2,6 +2,7 @@ import React from "react";
 import { ActivityIndicator, AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useEffect, useState } from "react";
 import { getSession, handleAuthCallback, onSessionChange } from "../auth/session";
+import { CalendarScreen } from "../calendar/CalendarScreen";
 
 export function App() {
   const [signedIn, setSignedIn] = useState(false);
@@ -16,6 +17,7 @@ export function App() {
     void refresh();
     return () => { mounted = false; linkSubscription.remove(); authSubscription.unsubscribe(); appStateSubscription.remove(); };
   }, []);
+  if (signedIn) return <View style={styles.screen} testID="mobile-app-shell"><CalendarScreen /></View>;
   return <View style={styles.screen} testID="mobile-app-shell">
     <View style={styles.brandMark} accessibilityLabel="온달력"><View style={[styles.markBar, styles.markShort]} /><View style={[styles.markBar, styles.markMedium]} /><View style={[styles.markBar, styles.markTall]} /></View>
     <Text style={styles.eyebrow}>온달력</Text>
