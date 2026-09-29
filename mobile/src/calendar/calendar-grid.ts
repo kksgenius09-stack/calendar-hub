@@ -6,6 +6,10 @@ export function dayKey(date: Date) {
   const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, "0"); const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+export function eventDateKey(value: string, timeZone = "Asia/Seoul") {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
+  return `${parts.find((p) => p.type === "year")?.value}-${parts.find((p) => p.type === "month")?.value}-${parts.find((p) => p.type === "day")?.value}`;
+}
 
 export function monthLabel(date: Date) { return `${date.getFullYear()}년 ${date.getMonth() + 1}월`; }
 
@@ -13,8 +17,8 @@ export function monthDays(month: Date, events: CalendarEvent[], now = new Date()
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   const start = new Date(first); start.setDate(1 - first.getDay());
   const byDay = new Map<string, CalendarEvent[]>();
-  for (const event of events) { const key = event.start.slice(0, 10); byDay.set(key, [...(byDay.get(key) ?? []), event]); }
+  for (const event of events) { const key = eventDateKey(event.start); byDay.set(key, [...(byDay.get(key) ?? []), event]); }
   return Array.from({ length: 42 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); const key = dayKey(date); return { date, key, currentMonth: date.getMonth() === month.getMonth(), today: key === dayKey(now), events: byDay.get(key) ?? [] }; });
 }
 
-export function eventsForDay(events: CalendarEvent[], key: string) { return events.filter((event) => event.start.slice(0, 10) === key); }
+export function eventsForDay(events: CalendarEvent[], key: string) { return events.filter((event) => eventDateKey(event.start) === key); }
