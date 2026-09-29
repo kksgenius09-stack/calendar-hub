@@ -18,7 +18,7 @@ export async function getSession(): Promise<MobileSession> {
 
 /** Returns an OAuth URL for the native browser/auth-session flow. */
 export async function signInWithGoogle(): Promise<{ url: string }> {
-  const redirectTo = env.authRedirectUrl || "onecalendar://auth/callback";
+  const redirectTo = env.authRedirectUrl || "ondalcalendar://auth/callback";
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {

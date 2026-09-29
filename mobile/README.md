@@ -6,7 +6,7 @@ iPhone과 Android를 함께 지원하는 Expo 기반 모바일 앱입니다.
 
 1. `.env.example`을 `.env`로 복사합니다.
 2. 웹 프로젝트와 같은 Supabase URL과 Publishable Key를 입력합니다.
-3. Supabase Authentication의 Redirect URLs에 `onecalendar://auth/callback`을 추가합니다.
+3. Supabase Authentication의 Redirect URLs에 `ondalcalendar://auth/callback`을 추가합니다.
 
 ## 실행
 
