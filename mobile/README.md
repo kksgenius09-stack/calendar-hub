@@ -7,6 +7,9 @@ iPhone과 Android를 함께 지원하는 Expo 기반 모바일 앱입니다.
 1. `.env.example`을 `.env`로 복사합니다.
 2. 웹 프로젝트와 같은 Supabase URL과 Publishable Key를 입력합니다.
 3. Supabase Authentication의 Redirect URLs에 `ondalcalendar://auth/callback`을 추가합니다.
+   Expo Go로 테스트할 때는 앱을 LAN으로 실행한 뒤 터미널에 표시되는
+   `exp://.../--/auth/callback` 주소도 같은 목록에 추가해야 합니다. Expo Go는
+   기기별 LAN 주소를 사용하므로 이 주소는 실행할 때마다 확인합니다.
 
 ## 실행
 
@@ -16,6 +19,9 @@ npm start
 ```
 
 Expo Go에서 QR 코드를 스캔하거나 Android/iOS 시뮬레이터를 선택할 수 있습니다.
+Google 로그인은 로그인 완료 후 웹페이지에 남지 않고 Expo Go로 돌아와야 합니다.
+앱이 열리지 않으면 Supabase Redirect URLs에 현재 Expo Go callback 주소가
+등록되어 있는지 먼저 확인합니다.
 
 ## 현재 포함된 기능
 

@@ -1,11 +1,11 @@
 import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient, type Session, type User } from "@supabase/supabase-js";
-import { env } from "../config/env";
+import { env, getSupabaseAuthRedirectUrl } from "../config/env";
 
 const storage = AsyncStorage;
 export const supabase = createClient(env.supabaseUrl, env.supabasePublishableKey, {
-  auth: { storage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+  auth: { storage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false, flowType: "pkce" },
 });
 
 export type MobileSession = { session: Session | null; user: User | null };
@@ -18,7 +18,7 @@ export async function getSession(): Promise<MobileSession> {
 
 /** Returns an OAuth URL for the native browser/auth-session flow. */
 export async function signInWithGoogle(): Promise<{ url: string }> {
-  const redirectTo = env.authRedirectUrl || "ondalcalendar://auth/callback";
+  const redirectTo = getSupabaseAuthRedirectUrl();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {

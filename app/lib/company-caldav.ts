@@ -1,6 +1,26 @@
 import { discoverICloudCalendars } from "@/app/lib/icloud-caldav";
 import { runtimeEnv } from "@/app/lib/runtime-env";
 
+function isPrivateOrLinkLocalIPv4(ip: string) {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return false;
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
+function isPrivateOrLinkLocalIPv6(ip: string) {
+  const normalized = ip.toLowerCase();
+  if (normalized === "::1") return true;
+  if (normalized.startsWith("fe80:")) return true;
+  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
+  if (normalized.startsWith("::ffff:")) return isPrivateOrLinkLocalIPv4(normalized.slice(7));
+  return false;
+}
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -38,7 +58,7 @@ export async function openCompanyCredentials(value: string): Promise<CompanyCalD
   return JSON.parse(decoder.decode(decrypted)) as CompanyCalDavCredentials;
 }
 
-export function validateCalDavServer(value: string) {
+export async function validateCalDavServer(value: string) {
   let url: URL;
   try {
     const normalized = /^https?:\/\//i.test(value.trim()) ? value.trim() : `https://${value.trim()}`;
@@ -48,8 +68,10 @@ export function validateCalDavServer(value: string) {
   }
   if (url.protocol !== "https:") throw new Error("INVALID_SERVER_URL");
   const host = url.hostname.toLowerCase();
-  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".local")) throw new Error("INVALID_SERVER_URL");
-  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) throw new Error("INVALID_SERVER_URL");
+  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) throw new Error("INVALID_SERVER_URL");
+  const bareHost = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(bareHost) && isPrivateOrLinkLocalIPv4(bareHost)) throw new Error("INVALID_SERVER_URL");
+  if (bareHost.includes(":") && isPrivateOrLinkLocalIPv6(bareHost)) throw new Error("INVALID_SERVER_URL");
   url.username = "";
   url.password = "";
   return url.toString();
@@ -58,10 +80,9 @@ export function validateCalDavServer(value: string) {
 export async function discoverCompanyCalendars(credentials: CompanyCalDavCredentials, onAuthenticated?: () => void) {
   const server = new URL(credentials.serverUrl);
   const directFirst = server.pathname !== "/";
-  const accountPrincipal = new URL(`/principals/users/${encodeURIComponent(credentials.email)}/`, server.origin).toString();
   const candidates = directFirst
     ? [credentials.serverUrl, new URL("/.well-known/caldav", server.origin).toString()]
-    : [accountPrincipal, new URL("/.well-known/caldav", server.origin).toString(), credentials.serverUrl];
+    : [new URL("/.well-known/caldav", server.origin).toString(), credentials.serverUrl];
   let lastError: unknown;
   let discovered = false;
   const errorCodes: string[] = [];

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { googleConfig } from "@/app/lib/google-oauth";
 import { requireOnCalUser } from "@/app/lib/connection-store";
+import { recordErrorLog } from "@/app/lib/error-log";
 
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
     });
     return response;
   } catch {
+    await recordErrorLog({ provider: "google", action: "connect", stage: "authorize", errorCode: "SETUP_REQUIRED" });
     return NextResponse.redirect(`${origin}/?google=setup-required`);
   }
 }

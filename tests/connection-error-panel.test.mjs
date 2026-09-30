@@ -58,7 +58,7 @@ test("회사 일정 연결 성공은 현재 화면을 유지한 채 모달을 �
   const submit = page.match(/const connectCalDav = async \(\) => \{([\s\S]*?)\n  const disconnectSource/);
   assert.ok(submit, "CalDAV submit handler exists");
   assert.match(submit[1], /setCalDavModal\(false\)/);
-  assert.ok(submit[1].includes('setNotice("회사 일정이 연결됐어요.")'));
-  assert.match(submit[1], /await loadEvents\(\)/);
+  assert.ok(submit[1].includes('setNotice("CalDAV 일정이 연결됐어요.")'));
+  assert.match(submit[1], /(?:await|void) loadEvents\(\)/);
   assert.doesNotMatch(submit[1], /location\.reload\(\)/);
 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { googleConfig, sealTokens } from "@/app/lib/google-oauth";
 import { requireOnCalUser, saveConnection } from "@/app/lib/connection-store";
+import { recordErrorLog, recordUsageEvent } from "@/app/lib/error-log";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -39,10 +40,12 @@ export async function GET(request: NextRequest) {
       expires_at: Date.now() + token.expires_in * 1000,
     });
     await saveConnection("google", sealed, user.email || "Google");
+    await recordUsageEvent({ eventName: "calendar_connect", provider: "google" });
     const response = NextResponse.redirect(`${origin}/?google=connected`);
     response.cookies.delete("oncal_google_state");
     return response;
   } catch {
+    await recordErrorLog({ provider: "google", action: "connect", stage: "oauth_callback", errorCode: "OAUTH_CALLBACK_FAILED" });
     return NextResponse.redirect(`${origin}/?google=failed`);
   }
 }

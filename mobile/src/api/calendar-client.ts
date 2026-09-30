@@ -6,6 +6,7 @@ export type CalendarChoice = { id: string; name: string; color?: string; primary
 export type CalendarEvent = {
   id: string; providerEventId?: string; repeatSeriesId?: string; resourceUrl?: string;
   calendarId: string; calendarName?: string; calendarColor?: string; title: string;
+  description?: string;
   start: string; end: string; allDay: boolean; recurrence?: string; source: Source;
 };
 export type CalendarResponse = { connected: boolean; configured?: boolean; calendars: CalendarChoice[]; events: CalendarEvent[] };

@@ -132,11 +132,37 @@ export async function discoverICloudCalendars(
   });
 }
 
-function parseIcsDate(value: string) {
+function tzOffsetMinutes(utcMillis: number, timeZone: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      .formatToParts(new Date(utcMillis))
+      .map((part) => [part.type, part.value]),
+  );
+  const hour = parts.hour === "24" ? "0" : parts.hour;
+  const asUTC = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(hour), Number(parts.minute), Number(parts.second));
+  return (asUTC - utcMillis) / 60000;
+}
+
+function parseIcsDate(value: string, tzid?: string) {
   if (/^\d{8}$/.test(value)) return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
   const match = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
   if (!match) return value;
-  return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}${match[7]}`;
+  const [, y, mo, d, h, mi, s, z] = match;
+  if (z || !tzid) return `${y}-${mo}-${d}T${h}:${mi}:${s}${z}`;
+  try {
+    const guess = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s));
+    return new Date(guess - tzOffsetMinutes(guess, tzid) * 60000).toISOString();
+  } catch {
+    return `${y}-${mo}-${d}T${h}:${mi}:${s}`;
+  }
+}
+
+function durationMs(value: string) {
+  const match = value.match(/^([+-])?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/i);
+  if (!match) return 0;
+  const [, sign, weeks, days, hours, minutes, seconds] = match;
+  const totalSeconds = Number(weeks || 0) * 604800 + Number(days || 0) * 86400 + Number(hours || 0) * 3600 + Number(minutes || 0) * 60 + Number(seconds || 0);
+  return (sign === "-" ? -1 : 1) * totalSeconds * 1000;
 }
 
 export async function fetchICloudEvents(credentials: ICloudCredentials, calendar: ICloudCalendar, start: Date, end: Date) {
@@ -152,8 +178,21 @@ export async function fetchICloudEvents(credentials: ICloudCredentials, calendar
     const items = unfolded.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) ?? [];
     return items.flatMap((item) => {
       const line = (name: string) => item.match(new RegExp(`^${name}(?:;[^:]*)?:(.*)$`, "mi"))?.[1]?.trim() || "";
-      const startValue = line("DTSTART");
-      if (!startValue) return [];
+      const dateProperty = (name: string) => {
+        const found = item.match(new RegExp(`^${name}(;[^:]*)?:(.*)$`, "mi"));
+        if (!found) return null;
+        return { value: found[2].trim(), tzid: found[1]?.match(/TZID=([^;]+)/i)?.[1] };
+      };
+      const startProp = dateProperty("DTSTART");
+      if (!startProp?.value) return [];
+      const startValue = startProp.value;
+      const endProp = dateProperty("DTEND");
+      const duration = line("DURATION");
+      const end = endProp?.value
+        ? parseIcsDate(endProp.value, endProp.tzid)
+        : duration
+          ? new Date(new Date(parseIcsDate(startValue, startProp.tzid)).getTime() + durationMs(duration)).toISOString()
+          : parseIcsDate(startValue, startProp.tzid);
       return [{
         id: `${calendar.id}:${line("UID") || startValue}`,
         providerEventId: line("UID") || startValue,
@@ -162,8 +201,8 @@ export async function fetchICloudEvents(credentials: ICloudCredentials, calendar
         calendarName: calendar.name,
         calendarColor: calendar.color,
         title: (line("SUMMARY") || "제목 없는 일정").replaceAll("\\n", " ").replaceAll("\\,", ","),
-        start: parseIcsDate(startValue),
-        end: parseIcsDate(line("DTEND")),
+        start: parseIcsDate(startValue, startProp.tzid),
+        end,
         allDay: /^\d{8}$/.test(startValue),
         recurrence: line("RRULE"),
       }];

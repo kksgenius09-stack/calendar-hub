@@ -94,7 +94,10 @@ export function eventOccursOnDate(event: CalendarEventRange, date: string) {
   return date >= startDate && date <= endDate;
 }
 
-export function monthEventSegments(events: MonthRangeEvent[], visibleStart: string, visibleDays = 42, maxLanes = 3) {
+// Keep one lane available for the overflow affordance and preserve a little
+// breathing room inside each month cell. The fifth event remains accessible
+// from the cell's "+N개 더보기" action.
+export function monthEventSegments(events: MonthRangeEvent[], visibleStart: string, visibleDays = 42, maxLanes = 4) {
   const firstDay = dayNumber(visibleStart);
   const lastDay = firstDay + visibleDays - 1;
   const occupied = Array.from({ length: Math.ceil(visibleDays / 7) }, () =>

@@ -2,10 +2,21 @@ import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/app/lib/supabase/server";
 import { sealTokens } from "@/app/lib/google-oauth";
 
+function safeNextPath(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
+  try {
+    const parsed = new URL(value, "https://app.local");
+    if (parsed.origin !== "https://app.local") return "/";
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next")?.startsWith("/") ? url.searchParams.get("next")! : "/";
+  const next = safeNextPath(url.searchParams.get("next"));
   if (code) {
     const supabase = await getSupabaseServerClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);

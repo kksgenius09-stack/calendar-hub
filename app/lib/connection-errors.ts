@@ -80,12 +80,12 @@ function exactInternalCode(provider: ConnectionProvider, stage: ConnectionStage,
   const message = error.message;
   if (message === "AUTH_REQUIRED") return "AUTH_REQUIRED";
   if (message === "INVALID_CREDENTIALS" || message === "CALDAV_HTTP_401") return "INVALID_CREDENTIALS";
-  if (provider === "caldav" && message === "CALDAV_HTTP_403") return "PERMISSION_DENIED";
-  if (provider === "caldav" && (message === "CALDAV_HTTP_404" || message === "CALDAV_PRINCIPAL_NOT_FOUND" || message === "CALDAV_HOME_NOT_FOUND")) {
+  if (message === "CALDAV_HTTP_403") return "PERMISSION_DENIED";
+  if (message === "CALDAV_HTTP_404" || message === "CALDAV_PRINCIPAL_NOT_FOUND" || message === "CALDAV_HOME_NOT_FOUND") {
     return "CALDAV_PATH_NOT_FOUND";
   }
   if (stage === "discover" && message === "NO_CALENDARS") return "NO_CALENDARS";
-  if (provider === "caldav" && message === "INVALID_SERVER_URL") return "INVALID_SERVER_URL";
+  if (message === "INVALID_SERVER_URL") return "INVALID_SERVER_URL";
   return undefined;
 }
 

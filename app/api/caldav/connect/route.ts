@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { mapConnectionError, type ConnectionStage } from "@/app/lib/connection-errors";
 import { discoverCompanyCalendars, sealCompanyCredentials, validateCalDavServer } from "@/app/lib/company-caldav";
 import { saveConnection } from "@/app/lib/connection-store";
+import { recordErrorLog, recordUsageEvent } from "@/app/lib/error-log";
 
 export async function POST(request: Request) {
   let stage: ConnectionStage = "validate";
@@ -9,7 +10,7 @@ export async function POST(request: Request) {
     const input = await request.json() as { serverUrl?: string; email?: string; password?: string };
     if (!input.serverUrl?.trim()) throw new Error("INVALID_SERVER_URL");
     if (!input.email?.trim() || !input.password) throw new Error("INVALID_CREDENTIALS");
-    const credentials = { serverUrl: validateCalDavServer(input.serverUrl), email: input.email.trim(), password: input.password };
+    const credentials = { serverUrl: await validateCalDavServer(input.serverUrl), email: input.email.trim(), password: input.password };
     stage = "authenticate";
     const calendars = await discoverCompanyCalendars(credentials, () => {
       stage = "discover";
@@ -18,9 +19,11 @@ export async function POST(request: Request) {
 
     stage = "save";
     await saveConnection("caldav", await sealCompanyCredentials(credentials), credentials.email);
+    await recordUsageEvent({ eventName: "calendar_connect", provider: "caldav" });
     return NextResponse.json({ connected: true, calendarCount: calendars.length });
   } catch (error) {
     const failure = mapConnectionError("caldav", stage, error);
+    await recordErrorLog({ provider: "caldav", action: "connect", stage, errorCode: failure.code, statusCode: failure.code === "AUTH_REQUIRED" ? 401 : 400 });
     return NextResponse.json({ connected: false, error: failure }, { status: failure.code === "AUTH_REQUIRED" ? 401 : 400 });
   }
 }

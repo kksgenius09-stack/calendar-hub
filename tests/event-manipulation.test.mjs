@@ -265,7 +265,7 @@ test("PATCH 실패 시 미리보기와 저장 중 상태를 끝내고 원본 일
   });
 
   assert.equal(saved, false);
-  assert.deepEqual(order, ["preview", "saving", "PATCH", "이 회사 캘린더는 읽기 전용이에요. ‘내 일정’에서만 수정할 수 있어요.", "idle"]);
+  assert.deepEqual(order, ["preview", "saving", "PATCH", "이 CalDAV 캘린더는 읽기 전용이에요. ‘내 일정’에서만 수정할 수 있어요.", "idle"]);
   assert.equal(reloadCount, 0);
   assert.equal(events[0], event);
   assert.deepEqual(event, { source:"icloud", calendarId:"home", providerEventId:"uid-1", resourceUrl:"/event/1.ics", title:"약속", start:"2026-09-22", end:"2026-09-23", allDay:true });
