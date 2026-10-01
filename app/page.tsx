@@ -164,7 +164,7 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleRangeStart, visibleRangeEnd]);
 
-  useEffect(() => { const openPending=()=>{const intent=pendingConnection.current;if(intent==="icloud")setICloudModal(true);if(intent==="daou")setCalDavModal(true);pendingConnection.current=null;}; const supabase = getSupabaseBrowserClient(); supabase.auth.getUser().then(({ data }) => { const email=data.user?.email||null; setUserEmail(email); setAuthReady(true); if(email)openPending(); }); const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { const email=session?.user.email||null; setUserEmail(email); setAuthReady(true); if(email)openPending(); }); return () => listener.subscription.unsubscribe(); }, []);
+  useEffect(() => { const openPending=()=>{const intent=pendingConnection.current;if(intent==="icloud")setICloudModal(true);if(intent==="daou")setCalDavModal(true);pendingConnection.current=null;}; const supabase = getSupabaseBrowserClient(); supabase.auth.getUser().then((result: Awaited<ReturnType<typeof supabase.auth.getUser>>) => { const email=result.data.user?.email||null; setUserEmail(email); setAuthReady(true); if(email)openPending(); }); const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => { const email=session?.user.email||null; setUserEmail(email); setAuthReady(true); if(email)openPending(); }); return () => listener.subscription.unsubscribe(); }, []);
   // Initial browser settings must be read after hydration.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setShowLunar(localStorage.getItem("oncal-show-lunar") === "true"); setAutoSyncMinutes(Number(localStorage.getItem("oncal-auto-sync") || "1")); setDefaultCalendarKey(localStorage.getItem("oncal-default-calendar") || ""); try{setSourceExpanded(normalizeExpandedSources(JSON.parse(localStorage.getItem("oncal-source-expanded")||"null")));}catch{setSourceExpanded(normalizeExpandedSources(null));} const params = new URLSearchParams(location.search); const result = params.get("google") || params.get("icloud") || params.get("caldav"); const connect=params.get("connect"); if(connect==="icloud"||connect==="daou")pendingConnection.current=connect; if (result === "connected") setNotice("캘린더가 연결됐어요."); if (result === "failed") setNotice("연결에 실패했어요. 로그인 정보를 확인해 주세요."); if (result === "setup-required") setNotice("연동 설정이 아직 완료되지 않았어요."); if (result||connect) history.replaceState({}, "", location.pathname); }, []);
@@ -388,6 +388,7 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
       ? eventDrag.mode==="move" ? moveEventToDate(eventDrag.event,eventDrag.targetDate)
         : resizeEventToDate(eventDrag.event,eventDrag.mode==="resize-start"?"start":"end",eventDrag.targetDate)
       : null;
+    const previewDateValue=(date:string,time:string,allDay:boolean,isEnd=false):string=>allDay?(isEnd?dateKey(addDays(new Date(`${date}T00:00:00`),1)):date):new Date(`${date}T${time}`).toISOString();
     const previewEvent:EventItem|undefined=eventDrag&&previewDraft?{
       ...eventDrag.event,
       start:previewDateValue(previewDraft.startDate,previewDraft.startTime,previewDraft.allDay),
@@ -400,7 +401,7 @@ function CalendarView({ view, cursor, range, events, loading, showLunar, saving,
       const current=index<cells.length&&holidayLabel(cells[index])?cells[index]:null;
       if(current&&!holidayStart)holidayStart=current;
       const next=index+1<cells.length&&holidayLabel(cells[index+1])?cells[index+1]:null;
-      if(holidayStart&&(!current||!next)){const end=current?addDays(current,1):holidayStart;const holidayTitle=Array.from({length:Math.max(1,Math.round((end.getTime()-holidayStart.getTime())/86400000))},(_,offset)=>holidayLabel(addDays(holidayStart,offset))).find(label=>label&&!label.includes("연휴"))||holidayLabel(holidayStart);holidayEvents.push({id:`holiday:${dateKey(holidayStart)}`,calendarId:"holiday",calendarName:"공휴일",calendarColor:"#d95768",title:holidayTitle,start:dateKey(holidayStart),end:dateKey(end),allDay:true,source:"daou"});holidayStart=null;}
+      if(holidayStart&&(!current||!next)){const start=holidayStart;const end=current?addDays(current,1):start;const holidayTitle=Array.from({length:Math.max(1,Math.round((end.getTime()-start.getTime())/86400000))},(_,offset)=>holidayLabel(addDays(start,offset))).find(label=>label&&!label.includes("연휴"))||holidayLabel(start);holidayEvents.push({id:`holiday:${dateKey(start)}`,calendarId:"holiday",calendarName:"공휴일",calendarColor:"#d95768",title:holidayTitle,start:dateKey(start),end:dateKey(end),allDay:true,source:"daou"});holidayStart=null;}
     }
     const layoutSource=holidayEvents.concat(previewEvent?events.map(event=>event===eventDrag?.event?previewEvent:event):events);
     const layoutEvents=layoutSource.map(event=>{const id=`${event.source}:${event.calendarId}:${event.id}`;eventByLayoutId.set(id,event);return{id,start:event.start,end:event.end,allDay:event.allDay};});

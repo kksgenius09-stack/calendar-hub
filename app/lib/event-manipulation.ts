@@ -36,7 +36,7 @@ type GestureMode = "move" | "resize-start" | "resize-end";
 
 type GesturePersistenceOptions = {
   sourcePath: Record<ManipulableEvent["source"], string>;
-  fetcher: (url: string, options: RequestInit) => Promise<{ ok: boolean }>;
+  fetcher: (url: string, options: RequestInit) => Promise<Response>;
   loadEvents: () => Promise<void>;
   setSaving: (saving: boolean) => void;
   onDraft: (draft: EventDateDraft) => void;

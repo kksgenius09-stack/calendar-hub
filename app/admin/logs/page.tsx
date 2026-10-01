@@ -85,11 +85,12 @@ export default async function AdminLogsPage() {
     .select("user_id,user_label,event_name,provider,success,created_at")
     .order("created_at", { ascending: false })
     .limit(1000);
-  const { data: connectionCounts } = await supabase.rpc("admin_connection_counts");
+  const { data: connectionCountsRaw } = await supabase.rpc("admin_connection_counts");
+  const connectionCounts = (connectionCountsRaw ?? []) as Array<{ provider: string; connected_users: number }>;
   const rows = logs ?? [];
   const usageRows = (usage ?? []).filter(row => row.user_id !== user.id);
-  const connectedByProvider = Object.fromEntries((connectionCounts ?? []).filter(row => row.provider !== "total").map(row => [row.provider, Number(row.connected_users)]));
-  const totalConnected = Number((connectionCounts ?? []).find(row => row.provider === "total")?.connected_users ?? 0);
+  const connectedByProvider = Object.fromEntries(connectionCounts.filter(row => row.provider !== "total").map(row => [row.provider, Number(row.connected_users)]));
+  const totalConnected = Number(connectionCounts.find(row => row.provider === "total")?.connected_users ?? 0);
   const connectedUsers = new Set<string>();
   const usageUsers = new Set(usageRows.map(row => row.user_id));
   const visitCounts = usageRows.filter(row => row.event_name === "visit" && row.success).reduce<Record<string, number>>((acc, row) => { acc[row.user_id] = (acc[row.user_id] ?? 0) + 1; return acc; }, {});

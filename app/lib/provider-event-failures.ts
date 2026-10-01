@@ -45,6 +45,6 @@ export function providerWriteFailure(
   const failure = providerEventFailure(provider, undefined, error);
   return {
     status: failure.status,
-    body: { error: failure.body.connected ? "save_failed" : failure.body.error },
+    body: { error: failure.body.connected ? "save_failed" : failure.body.error as "auth_required" | "reconnect_required" },
   };
 }
