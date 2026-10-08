@@ -502,8 +502,17 @@ function SportsFollowSection({ sport, title, description, teamsEndpoint }: { spo
     }
   };
 
-  return <div className="settings-group"><div className="settings-line"><span><b>{title}</b><small>{description}</small></span></div>
-    {loading ? <small>불러오는 중…</small> : error ? <small>{error}</small> : <div className="sports-team-grid">{teams.map((team) => <button key={team.id} type="button" disabled={pending === team.id} className={`sports-team-chip ${followed.has(team.id) ? "on" : ""}`} onClick={() => void toggle(team)}>{team.label}</button>)}</div>}
+  const followedTeams = teams.filter((team) => followed.has(team.id));
+  const unfollowedTeams = teams.filter((team) => !followed.has(team.id));
+
+  return <div className="settings-group">
+    <div className="settings-line"><span><b>{title}</b><small>{description}</small></span>
+      {!loading && !error && <select value="" disabled={pending !== null} onChange={(e) => { const team = teams.find((t) => t.id === e.target.value); if (team) void toggle(team); }}>
+        <option value="">+ 팀 추가</option>
+        {unfollowedTeams.map((team) => <option key={team.id} value={team.id}>{team.label}</option>)}
+      </select>}
+    </div>
+    {loading ? <small>불러오는 중…</small> : error ? <small>{error}</small> : followedTeams.length > 0 && <div className="sports-team-grid">{followedTeams.map((team) => <button key={team.id} type="button" disabled={pending === team.id} className="sports-team-chip on" onClick={() => void toggle(team)}>{team.label} ×</button>)}</div>}
   </div>;
 }
 
