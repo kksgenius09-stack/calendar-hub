@@ -5,7 +5,7 @@ export type ManipulableEvent = {
   recurrence?: string;
   repeatSeriesId?: string;
   resourceUrl?: string;
-  source: "icloud" | "google" | "daou";
+  source: "icloud" | "google" | "daou" | "sports";
   calendarName?: string;
 };
 
@@ -89,6 +89,9 @@ function currentDraft(event: ManipulableEvent): EventDateDraft | null {
 }
 
 export function eventManipulationState(event: ManipulableEvent) {
+  if (event.source === "sports") {
+    return { allowed: false, reason: "스포츠 일정은 읽기 전용이에요." };
+  }
   if (event.recurrence || event.repeatSeriesId) {
     return { allowed: false, reason: "반복 일정은 편집창에서 변경해 주세요." };
   }

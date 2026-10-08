@@ -371,10 +371,14 @@ button { color: inherit; }
 .settings-group small, .settings-line small { display: block; color: #969ca6; font-size: 9px; line-height: 1.4; }
 .settings-group select { width: 155px; height: 38px; padding: 0 9px; border: 1px solid #dfe1e7; border-radius: 8px; background: #fff; font-size: 10px; }
 .sports-team-grid { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 16px 16px; }
-.sports-team-chip { padding: 7px 12px; border: 1px solid #dfe1e7; border-radius: 999px; background: #fff; font-size: 11px; color: #4a4f59; cursor: pointer; }
-.sports-team-chip:hover { border-color: #c7cad1; }
+.sports-team-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; border: 1px solid #dfe1e7; border-radius: 999px; background: #fff; font-size: 11px; color: #4a4f59; }
 .sports-team-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
-.sports-team-chip:disabled { opacity: .6; cursor: default; }
+.sports-team-chip input[type="color"] { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; overflow: hidden; cursor: pointer; background: none; }
+.sports-team-chip input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.sports-team-chip input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.sports-team-chip button { width: 18px; height: 18px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 13px; line-height: 1; cursor: pointer; }
+.sports-team-chip button:hover { background: #ffffff80; }
+.sports-team-chip button:disabled { opacity: .5; cursor: default; }
 .settings-footer { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
 .settings-footer small { color: #a0a5ad; }
 .settings-footer .modal-connect { width: 88px; margin-left: auto; }

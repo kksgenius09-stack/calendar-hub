@@ -13,11 +13,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const input = (await request.json()) as { sport?: string; teamId?: string; teamName?: string };
+    const input = (await request.json()) as { sport?: string; teamId?: string; teamName?: string; color?: string };
     if (!input.sport?.trim() || !input.teamId?.trim() || !input.teamName?.trim()) {
       return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
     }
-    await followTeam(input.sport.trim(), input.teamId.trim(), input.teamName.trim());
+    await followTeam(input.sport.trim(), input.teamId.trim(), input.teamName.trim(), input.color?.trim());
     return NextResponse.json({ followed: true });
   } catch {
     return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
