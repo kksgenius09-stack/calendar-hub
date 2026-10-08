@@ -448,7 +448,66 @@ function LandingScreen({onExplore}:{onExplore:()=>void}) {
   return <main className="auth-page landing-page"><section className="auth-card"><div className="auth-brand"><span className="brand-mark">온</span><b>온달력</b></div><div className="auth-copy"><span>모든 달력을 한곳에</span><h1>내 모든 일정을<br/>하나의 달력으로</h1><p>Google·iCloud·CalDAV 일정을 한눈에 확인하고 PC와 모바일에서 그대로 이어서 사용하세요.</p></div><div className="landing-actions"><button className="google-auth-button" disabled={busy} onClick={()=>beginGoogleConnection(setBusy,setMessage)}><span className="google-g">G</span><b>{busy?"Google로 이동 중…":"Google로 시작하기"}</b></button><button className="explore-button" onClick={onExplore}>로그인 없이 둘러보기</button></div>{message&&<p className="auth-message">{message}</p>}<div className="icloud-support"><span className="iphone-mark">i</span><div><b>iPhone · iCloud 캘린더 지원</b><small>둘러보기 후 Apple 계정의 앱 전용 암호로 연결할 수 있어요.</small></div><em>지원 중</em></div><div className="auth-benefits"><span><i>✓</i> 회원가입과 Google 연결을 한 번에</span><span><i>✓</i> 달력은 로그인 없이 먼저 체험</span><span><i>✓</i> 연결정보는 암호화해 안전하게 보관</span></div><p className="service-plan-note">Google·iCloud·CalDAV 연결과 기본 일정 관리는 계속 무료로 제공합니다.<br/>향후 추가되는 일부 고급 기능은 온달력 Plus로 제공될 수 있습니다.</p><LegalLinks/></section><aside className="auth-visual"><div><span>Google</span><span>iPhone · iCloud</span><span>CalDAV</span></div><h2>연결은 한 번,<br/>일정은 모든 기기에서.</h2><p>업무와 개인 일정을 오가느라 여러 화면을 열 필요 없이 온달력 한곳에서 관리하세요.</p></aside></main>;
 }
 
+type SportsTeamOption = { id: string; label: string };
+
+function SportsFollowSection({ sport, title, description, teamsEndpoint }: { sport: string; title: string; description: string; teamsEndpoint: string }) {
+  const [teams, setTeams] = useState<SportsTeamOption[]>([]);
+  const [followed, setFollowed] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [teamsRes, followsRes] = await Promise.all([
+          fetch(teamsEndpoint),
+          fetch(`/api/sports/follows?sport=${sport}`),
+        ]);
+        const teamsData = await teamsRes.json();
+        const followsData = await followsRes.json();
+        if (!active) return;
+        const normalized: SportsTeamOption[] = (teamsData.teams ?? []).map((team: { id?: number; code?: string; full_name?: string; name?: string }) => ({
+          id: String(team.id ?? team.code),
+          label: team.full_name ?? team.name ?? "",
+        }));
+        setTeams(normalized.sort((a, b) => a.label.localeCompare(b.label)));
+        setFollowed(new Set((followsData.follows ?? []).map((follow: { teamId: string }) => follow.teamId)));
+      } catch {
+        if (active) setError("팀 목록을 불러오지 못했어요.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sport, teamsEndpoint]);
+
+  const toggle = async (team: SportsTeamOption) => {
+    const isFollowed = followed.has(team.id);
+    setPending(team.id);
+    try {
+      if (isFollowed) {
+        await fetch(`/api/sports/follows?sport=${sport}&teamId=${encodeURIComponent(team.id)}`, { method: "DELETE" });
+        setFollowed((prev) => { const next = new Set(prev); next.delete(team.id); return next; });
+      } else {
+        await fetch("/api/sports/follows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sport, teamId: team.id, teamName: team.label }) });
+        setFollowed((prev) => new Set(prev).add(team.id));
+      }
+    } catch {
+      setError("저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return <div className="settings-group"><div className="settings-line"><span><b>{title}</b><small>{description}</small></span></div>
+    {loading ? <small>불러오는 중…</small> : error ? <small>{error}</small> : <div className="sports-team-grid">{teams.map((team) => <button key={team.id} type="button" disabled={pending === team.id} className={`sports-team-chip ${followed.has(team.id) ? "on" : ""}`} onClick={() => void toggle(team)}>{team.label}</button>)}</div>}
+  </div>;
+}
+
 function SettingsModal({ calendars, defaultCalendarKey, autoSyncMinutes, showLunar, onDefaultCalendar, onAutoSync, onToggleLunar, onClose }: { calendars: CalendarItem[]; defaultCalendarKey: string; autoSyncMinutes: number; showLunar: boolean; onDefaultCalendar: (key:string)=>void; onAutoSync:(minutes:number)=>void; onToggleLunar:()=>void; onClose:()=>void }) {
   const state=defaultCalendarState(calendars,defaultCalendarKey);
-  return <div className="modal-backdrop" onMouseDown={onClose}><section className="connect-modal settings-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="settings-heading"><span>⚙</span><div><h2>캘린더 설정</h2><p>내 사용 방식에 맞게 온달력을 설정하세요.</p></div></div><div className="settings-group"><label><span><b>자동 동기화</b><small>다른 앱에서 변경된 일정을 자동으로 불러옵니다.</small></span><select value={autoSyncMinutes} onChange={e=>onAutoSync(Number(e.target.value))}><option value={0}>자동 동기화 끄기</option><option value={1}>1분마다</option><option value={5}>5분마다</option><option value={15}>15분마다</option></select></label><label><span><b>기본 저장 캘린더</b><small>새 일정을 만들 때 처음 선택되는 캘린더입니다.</small></span><select value={state.selectedKey} disabled={!state.available} onChange={e=>onDefaultCalendar(e.target.value)}>{!state.available?<option value="">{state.message}</option>:(["icloud","google","daou"] as Source[]).map(source=>{const choices=calendars.filter(c=>c.source===source);return choices.length?<optgroup label={sourceLabel[source]} key={source}>{choices.map(c=><option key={`${source}:${c.id}`} value={`${source}:${c.id}`}>{c.name}</option>)}</optgroup>:null})}</select></label><div className="settings-line"><span><b>대한민국 음력</b><small>월간 달력 날짜에 음력 월·일을 표시합니다.</small></span><button className={`toggle-switch ${showLunar?"on":""}`} role="switch" aria-checked={showLunar} onClick={onToggleLunar}><i/></button></div></div><div className="settings-footer"><small>설정은 이 기기에 자동 저장됩니다.</small><button className="modal-connect" onClick={onClose}>완료</button></div></section></div>;
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="connect-modal settings-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="settings-heading"><span>⚙</span><div><h2>캘린더 설정</h2><p>내 사용 방식에 맞게 온달력을 설정하세요.</p></div></div><div className="settings-group"><label><span><b>자동 동기화</b><small>다른 앱에서 변경된 일정을 자동으로 불러옵니다.</small></span><select value={autoSyncMinutes} onChange={e=>onAutoSync(Number(e.target.value))}><option value={0}>자동 동기화 끄기</option><option value={1}>1분마다</option><option value={5}>5분마다</option><option value={15}>15분마다</option></select></label><label><span><b>기본 저장 캘린더</b><small>새 일정을 만들 때 처음 선택되는 캘린더입니다.</small></span><select value={state.selectedKey} disabled={!state.available} onChange={e=>onDefaultCalendar(e.target.value)}>{!state.available?<option value="">{state.message}</option>:(["icloud","google","daou"] as Source[]).map(source=>{const choices=calendars.filter(c=>c.source===source);return choices.length?<optgroup label={sourceLabel[source]} key={source}>{choices.map(c=><option key={`${source}:${c.id}`} value={`${source}:${c.id}`}>{c.name}</option>)}</optgroup>:null})}</select></label><div className="settings-line"><span><b>대한민국 음력</b><small>월간 달력 날짜에 음력 월·일을 표시합니다.</small></span><button className={`toggle-switch ${showLunar?"on":""}`} role="switch" aria-checked={showLunar} onClick={onToggleLunar}><i/></button></div></div><SportsFollowSection sport="nba" title="NBA 관심 팀" description="선택한 팀의 경기 일정을 캘린더에서 볼 수 있어요. (베타, 무료)" teamsEndpoint="/api/sports/nba/teams"/><SportsFollowSection sport="esports" title="LCK 관심 팀" description="선택한 팀의 LCK 경기 일정을 캘린더에서 볼 수 있어요. (베타, 무료)" teamsEndpoint="/api/sports/esports/teams"/><div className="settings-footer"><small>설정은 이 기기에 자동 저장됩니다.</small><button className="modal-connect" onClick={onClose}>완료</button></div></section></div>;
 }
