@@ -468,9 +468,9 @@ function SportsFollowSection({ sport, title, description, teamsEndpoint }: { spo
         const teamsData = await teamsRes.json();
         const followsData = await followsRes.json();
         if (!active) return;
-        const normalized: SportsTeamOption[] = (teamsData.teams ?? []).map((team: { id?: number; code?: string; full_name?: string; name?: string }) => ({
+        const normalized: SportsTeamOption[] = (teamsData.teams ?? []).map((team: { id?: number; code?: string; full_name?: string; name?: string; name_ko?: string }) => ({
           id: String(team.id ?? team.code),
-          label: team.full_name ?? team.name ?? "",
+          label: team.name_ko ?? team.full_name ?? team.name ?? "",
         }));
         setTeams(normalized.sort((a, b) => a.label.localeCompare(b.label)));
         setFollowed(new Set((followsData.follows ?? []).map((follow: { teamId: string }) => follow.teamId)));
