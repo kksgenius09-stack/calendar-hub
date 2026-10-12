@@ -273,7 +273,7 @@ export default function Home() {
     {overflowPopup && <EventOverflowPopup {...overflowPopup} events={filtered} onEdit={event=>{setOverflowPopup(null);openEdit(event);}} onClose={()=>setOverflowPopup(null)}/>}
     {searchOpen && <SearchModal authenticated={Boolean(userEmail)} query={searchQuery} onQuery={setSearchQuery} years={searchYears} results={searchResults} loading={searchLoading} error={searchError} limit={searchLimit} onMore={()=>setSearchLimit(limit=>limit+50)} onPast={()=>setSearchYears(years=>expandSearchYears(years,"past"))} onFuture={()=>setSearchYears(years=>expandSearchYears(years,"future"))} onSelect={selectSearchResult} onClose={()=>setSearchOpen(false)}/>}
     {authOpen && <AccountConnectModal intent={authIntent} onClose={()=>setAuthOpen(false)}/>}
-    {settingsOpen && <SettingsModal calendars={writableCalendars} defaultCalendarKey={defaultCalendarKey || firstCalendarKey} autoSyncMinutes={autoSyncMinutes} showLunar={showLunar} onDefaultCalendar={changeDefaultCalendar} onAutoSync={changeAutoSync} onToggleLunar={toggleLunar} onClose={() => setSettingsOpen(false)}/>} 
+    {settingsOpen && <SettingsModal calendars={writableCalendars} defaultCalendarKey={defaultCalendarKey || firstCalendarKey} autoSyncMinutes={autoSyncMinutes} showLunar={showLunar} onDefaultCalendar={changeDefaultCalendar} onAutoSync={changeAutoSync} onToggleLunar={toggleLunar} onFollowsChanged={() => void loadEvents()} onClose={() => setSettingsOpen(false)}/>}
     {deletePrompt&&<div className="modal-backdrop" onMouseDown={()=>!saving&&setDeletePrompt(null)}><section className="delete-scope-modal" onMouseDown={event=>event.stopPropagation()}><span>반복 일정 삭제</span><h2>어느 일정을 삭제할까요?</h2><p>선택한 일정만 삭제하거나 같은 반복 일정 전체를 삭제할 수 있어요.</p><button onClick={()=>finishDelete("single")} disabled={saving}>이 일정만 삭제</button><button className="delete-all" onClick={()=>finishDelete("all")} disabled={saving}>반복 일정 모두 삭제</button><button className="delete-cancel" onClick={()=>setDeletePrompt(null)} disabled={saving}>취소</button></section></div>}
     {iCloudModal && <div className="modal-backdrop" onMouseDown={() => !iCloudConnecting && setICloudModal(false)}><section className="connect-modal icloud-connect-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={() => setICloudModal(false)}>×</button><span className="modal-icon icloud-connect-icon">●</span><h2>iCloud 캘린더 연결</h2><p>Apple 계정과 앱 전용 암호를 입력하세요. 암호화된 연결정보만 온달력 계정에 저장됩니다.</p><label><span>Apple 계정</span><input type="email" autoComplete="username" placeholder="name@example.com" value={iCloudForm.email} onChange={e=>setICloudForm({...iCloudForm,email:e.target.value})}/></label><label><span>앱 전용 암호</span><div className="password-input"><input type={showICloudPassword ? "text" : "password"} autoComplete="current-password" placeholder="xxxx-xxxx-xxxx-xxxx" value={iCloudForm.password} onChange={e=>setICloudForm({...iCloudForm,password:e.target.value})}/><button type="button" className="password-visibility" aria-label={showICloudPassword ? "암호 숨기기" : "암호 보기"} aria-pressed={showICloudPassword} onClick={()=>setShowICloudPassword(value => !value)}>{showICloudPassword ? "숨기기" : "보기"}</button></div></label><ICloudPasswordGuide/>{iCloudError && <ConnectionErrorPanel error={iCloudError} retrying={iCloudConnecting} onRetry={connectICloud}/>}<button className="modal-connect" disabled={iCloudConnecting||!iCloudForm.email||!iCloudForm.password} onClick={connectICloud}>{iCloudConnecting?"연결 확인 중…":"안전하게 연결"}</button></section></div>}
     {calDavModal && <div className="modal-backdrop" onMouseDown={() => !calDavConnecting && setCalDavModal(false)}><section className="connect-modal" onMouseDown={e => e.stopPropagation()}><button className="modal-close" onClick={() => setCalDavModal(false)}>×</button><span className="modal-icon">↻</span><h2>CalDAV 연결</h2><p>회사에서 안내받은 CalDAV 정보를 입력하세요.</p><label><span>CalDAV 서버</span><input placeholder="예: gw.company.co.kr" value={calDavForm.serverUrl} onChange={e => setCalDavForm({...calDavForm,serverUrl:e.target.value})}/></label><label><span>아이디 또는 이메일</span><input value={calDavForm.email} onChange={e => setCalDavForm({...calDavForm,email:e.target.value})}/></label><label><span>비밀번호 또는 앱 암호</span><div className="password-input"><input type={showCalDavPassword ? "text" : "password"} value={calDavForm.password} onChange={e => setCalDavForm({...calDavForm,password:e.target.value})}/><button type="button" className="password-visibility" aria-label={showCalDavPassword ? "암호 숨기기" : "암호 보기"} aria-pressed={showCalDavPassword} onClick={()=>setShowCalDavPassword(value => !value)}>{showCalDavPassword ? "숨기기" : "보기"}</button></div></label><small>가능하면 앱 전용 암호를 사용하세요.</small>{calDavError && <ConnectionErrorPanel error={calDavError} retrying={calDavConnecting} onRetry={connectCalDav}/>}<button className="modal-connect" disabled={calDavConnecting || !calDavForm.serverUrl || !calDavForm.email || !calDavForm.password} onClick={connectCalDav}>{calDavConnecting ? "연결 확인 중…" : "연결하기"}</button></section></div>}
@@ -461,15 +461,26 @@ function LandingScreen({onExplore}:{onExplore:()=>void}) {
 
 type SportsTeamOption = { id: string; label: string };
 
-const SPORTS_COLOR_PALETTE = ["#7166D8", "#D4645B", "#4E9A6A", "#C98A2E", "#3B82C4", "#B2558F"];
+const SPORTS_COLOR_PALETTE = ["#7166D8", "#D4645B", "#4E9A6A", "#C98A2E", "#3B82C4", "#B2558F", "#2F9E8F", "#C2455C", "#6B8E23", "#8A5FBF", "#D98C3D", "#4169B0"];
 
-function SportsFollowSection({ sport, title, description, teamsEndpoint }: { sport: string; title: string; description: string; teamsEndpoint: string }) {
+function SportsFollowSection({ sport, title, description, teamsEndpoint, onFollowsChanged }: { sport: string; title: string; description: string; teamsEndpoint: string; onFollowsChanged: () => void }) {
   const [teams, setTeams] = useState<SportsTeamOption[]>([]);
   const [followed, setFollowed] = useState<Set<string>>(new Set());
   const [colors, setColors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
+  const [colorPickerAnchor, setColorPickerAnchor] = useState<{ top: number; left: number } | null>(null);
+  const colorPickerRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (!colorPickerFor) return;
+    const close = (event: PointerEvent) => { if (colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) { setColorPickerFor(null); setColorPickerAnchor(null); } };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [colorPickerFor]);
 
   useEffect(() => {
     let active = true;
@@ -507,27 +518,36 @@ function SportsFollowSection({ sport, title, description, teamsEndpoint }: { spo
     setPending(team.id);
     try {
       if (isFollowed) {
-        await fetch(`/api/sports/follows?sport=${sport}&teamId=${encodeURIComponent(team.id)}`, { method: "DELETE" });
+        const res = await fetch(`/api/sports/follows?sport=${sport}&teamId=${encodeURIComponent(team.id)}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("DELETE_FAILED");
         setFollowed((prev) => { const next = new Set(prev); next.delete(team.id); return next; });
+        onFollowsChanged();
       } else {
         const color = SPORTS_COLOR_PALETTE[followed.size % SPORTS_COLOR_PALETTE.length];
-        await fetch("/api/sports/follows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sport, teamId: team.id, teamName: team.label, color }) });
+        const res = await fetch("/api/sports/follows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sport, teamId: team.id, teamName: team.label, color }) });
+        if (!res.ok) throw new Error("FOLLOW_FAILED");
         setFollowed((prev) => new Set(prev).add(team.id));
         setColors((prev) => ({ ...prev, [team.id]: color }));
+        onFollowsChanged();
       }
     } catch {
-      setError("저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      setActionError("저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setPending(null);
     }
   };
 
   const changeColor = async (team: SportsTeamOption, color: string) => {
+    const previous = colors[team.id];
     setColors((prev) => ({ ...prev, [team.id]: color }));
     try {
-      await fetch("/api/sports/follows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sport, teamId: team.id, teamName: team.label, color }) });
+      const res = await fetch("/api/sports/follows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sport, teamId: team.id, teamName: team.label, color }) });
+      if (!res.ok) throw new Error("COLOR_SAVE_FAILED");
+      setActionError("");
+      onFollowsChanged();
     } catch {
-      setError("색상을 저장하지 못했어요.");
+      setColors((prev) => ({ ...prev, [team.id]: previous ?? DEFAULT_SPORTS_COLOR }));
+      setActionError("색상을 저장하지 못했어요.");
     }
   };
 
@@ -541,16 +561,25 @@ function SportsFollowSection({ sport, title, description, teamsEndpoint }: { spo
         {unfollowedTeams.map((team) => <option key={team.id} value={team.id}>{team.label}</option>)}
       </select>}
     </div>
-    {loading ? <small className="sports-follow-note">불러오는 중…</small> : error ? <small className="sports-follow-note">{error}</small> : followedTeams.length > 0 && <div className="sports-team-grid">{followedTeams.map((team) => <span key={team.id} className="sports-team-chip on"><input type="color" value={colors[team.id] ?? DEFAULT_SPORTS_COLOR} onChange={(e) => void changeColor(team, e.target.value)} aria-label={`${team.label} 색상`}/>{team.label}<button type="button" disabled={pending === team.id} onClick={() => void toggle(team)} aria-label={`${team.label} 제거`}>×</button></span>)}</div>}
+    {loading ? <small className="sports-follow-note">불러오는 중…</small> : error ? <small className="sports-follow-note">{error}</small> : followedTeams.length > 0 && <div className="sports-team-grid">{followedTeams.map((team) => <span key={team.id} className="sports-team-chip on">
+      <span className="sports-color-picker" ref={colorPickerFor === team.id ? colorPickerRef : undefined}>
+        <button type="button" className="sports-color-swatch" style={{ backgroundColor: colors[team.id] ?? DEFAULT_SPORTS_COLOR }} aria-label={`${team.label} 색상 선택`} onClick={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setColorPickerAnchor({ top: rect.bottom + 6, left: rect.left }); setColorPickerFor((prev) => (prev === team.id ? null : team.id)); }}/>
+        {colorPickerFor === team.id && colorPickerAnchor && <div className="sports-color-popover" role="listbox" aria-label={`${team.label} 색상 선택`} style={{ top: colorPickerAnchor.top, left: colorPickerAnchor.left }}>
+          {SPORTS_COLOR_PALETTE.map((hex) => <button key={hex} type="button" className={`sports-color-option ${colors[team.id] === hex ? "selected" : ""}`} style={{ backgroundColor: hex }} aria-label={hex} onClick={() => { void changeColor(team, hex); setColorPickerFor(null); setColorPickerAnchor(null); }}/>)}
+        </div>}
+      </span>
+      {team.label}<button type="button" disabled={pending === team.id} onClick={() => void toggle(team)} aria-label={`${team.label} 제거`}>×</button>
+    </span>)}</div>}
+    {actionError && <small className="sports-follow-note sports-follow-note-error">{actionError}</small>}
   </div>;
 }
 
-function SettingsModal({ calendars, defaultCalendarKey, autoSyncMinutes, showLunar, onDefaultCalendar, onAutoSync, onToggleLunar, onClose }: { calendars: ProviderCalendarItem[]; defaultCalendarKey: string; autoSyncMinutes: number; showLunar: boolean; onDefaultCalendar: (key:string)=>void; onAutoSync:(minutes:number)=>void; onToggleLunar:()=>void; onClose:()=>void }) {
+function SettingsModal({ calendars, defaultCalendarKey, autoSyncMinutes, showLunar, onDefaultCalendar, onAutoSync, onToggleLunar, onFollowsChanged, onClose }: { calendars: ProviderCalendarItem[]; defaultCalendarKey: string; autoSyncMinutes: number; showLunar: boolean; onDefaultCalendar: (key:string)=>void; onAutoSync:(minutes:number)=>void; onToggleLunar:()=>void; onFollowsChanged: () => void; onClose:()=>void }) {
   const state=defaultCalendarState(calendars,defaultCalendarKey);
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="connect-modal settings-modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><div className="settings-heading"><span>⚙</span><div><h2>캘린더 설정</h2><p>내 사용 방식에 맞게 온달력을 설정하세요.</p></div></div>
     <p className="settings-section-label">일반</p>
     <div className="settings-group"><label><span><b>자동 동기화</b><small>다른 앱에서 변경된 일정을 자동으로 불러옵니다.</small></span><select value={autoSyncMinutes} onChange={e=>onAutoSync(Number(e.target.value))}><option value={0}>자동 동기화 끄기</option><option value={1}>1분마다</option><option value={5}>5분마다</option><option value={15}>15분마다</option></select></label><label><span><b>기본 저장 캘린더</b><small>새 일정을 만들 때 처음 선택되는 캘린더입니다.</small></span><select value={state.selectedKey} disabled={!state.available} onChange={e=>onDefaultCalendar(e.target.value)}>{!state.available?<option value="">{state.message}</option>:(["icloud","google","daou"] as const).map(source=>{const choices=calendars.filter(c=>c.source===source);return choices.length?<optgroup label={sourceLabel[source]} key={source}>{choices.map(c=><option key={`${source}:${c.id}`} value={`${source}:${c.id}`}>{c.name}</option>)}</optgroup>:null})}</select></label><div className="settings-line"><span><b>대한민국 음력</b><small>월간 달력 날짜에 음력 월·일을 표시합니다.</small></span><button className={`toggle-switch ${showLunar?"on":""}`} role="switch" aria-checked={showLunar} onClick={onToggleLunar}><i/></button></div></div>
     <p className="settings-section-label">스포츠 팔로우<span className="beta-badge">베타 · 무료</span></p>
-    <div className="settings-group"><SportsFollowSection sport="nba" title="NBA 관심 팀" description="선택한 팀의 경기 일정을 캘린더에서 확인하세요." teamsEndpoint="/api/sports/nba/teams"/><SportsFollowSection sport="esports" title="LCK 관심 팀" description="선택한 팀의 LCK 경기 일정을 캘린더에서 확인하세요." teamsEndpoint="/api/sports/esports/teams"/></div>
+    <div className="settings-group"><SportsFollowSection sport="nba" title="NBA 관심 팀" description="선택한 팀의 경기 일정을 캘린더에서 확인하세요." teamsEndpoint="/api/sports/nba/teams" onFollowsChanged={onFollowsChanged}/><SportsFollowSection sport="esports" title="LCK 관심 팀" description="선택한 팀의 LCK 경기 일정을 캘린더에서 확인하세요." teamsEndpoint="/api/sports/esports/teams" onFollowsChanged={onFollowsChanged}/></div>
     <div className="settings-footer"><small>설정은 이 기기에 자동 저장됩니다.</small><button className="modal-connect" onClick={onClose}>완료</button></div></section></div>;
 }
